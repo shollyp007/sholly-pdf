@@ -114,6 +114,28 @@ function createWindow() {
       pendingFileOpen = null
     }
   })
+
+  // ── Unsaved changes: ask renderer before closing ──────────────────────────
+  let closeConfirmed = false
+  mainWindow.on('close', async (e) => {
+    if (closeConfirmed) return
+    e.preventDefault()
+
+    // Read isDirty flag set by the renderer (avoids async IPC roundtrip)
+    let isDirty = false
+    try {
+      isDirty = await mainWindow.webContents.executeJavaScript('window.__shollyIsDirty || false')
+    } catch { /* webContents destroyed — just close */ }
+
+    if (!isDirty) {
+      closeConfirmed = true
+      mainWindow.close()
+      return
+    }
+
+    // Let the renderer show its own warning dialog (it can also offer Save)
+    mainWindow.webContents.send('app:before-close')
+  })
 }
 
 // ── IPC: Native save dialog ───────────────────────────────────────────────────
@@ -161,6 +183,17 @@ ipcMain.handle('updater:download', async () => {
 })
 ipcMain.handle('updater:install', () => {
   autoUpdater.quitAndInstall()
+})
+
+// ── IPC: Close confirmation ───────────────────────────────────────────────────
+ipcMain.on('app:confirm-close', () => {
+  if (mainWindow) {
+    // Find and update the closeConfirmed flag via a fresh close
+    mainWindow.webContents.executeJavaScript('true').then(() => {
+      // Re-trigger close; the handler will now see isDirty=false since user chose to close
+      mainWindow.destroy()
+    }).catch(() => mainWindow.destroy())
+  }
 })
 
 // ── Native app menu ───────────────────────────────────────────────────────────

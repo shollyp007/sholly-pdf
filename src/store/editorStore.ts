@@ -186,6 +186,21 @@ interface EditorState {
   // Edit-text tool: signals AnnotationLayer to enter edit mode for a newly-created text annotation
   pendingEditTextId: string | null;
   setPendingEditTextId: (id: string | null) => void;
+
+  // Ruler guides (view-only, not saved to PDF)
+  showRulers: boolean;
+  guides: Guide[];
+  toggleRulers: () => void;
+  addGuide: (g: Guide) => void;
+  updateGuide: (id: string, position: number) => void;
+  deleteGuide: (id: string) => void;
+  clearGuides: () => void;
+}
+
+export interface Guide {
+  id: string;
+  type: 'h' | 'v'; // h = horizontal line (fixed y), v = vertical line (fixed x)
+  position: number; // document coordinate in CSS px at scale=1
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -235,6 +250,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   lastSavedHandle: null,
   formFieldValues: {},
   pendingEditTextId: null,
+
+  showRulers: true,
+  guides: [],
 
   // ── Document actions ───────────────────────────────────────────────────────
   newDocument: (size, orientation, cw, ch) => {
@@ -546,4 +564,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   })),
 
   setPendingEditTextId: (pendingEditTextId) => set({ pendingEditTextId }),
+
+  toggleRulers: () => set((s) => ({ showRulers: !s.showRulers })),
+  addGuide: (g) => set((s) => ({ guides: [...s.guides, g] })),
+  updateGuide: (id, position) => set((s) => ({ guides: s.guides.map((g) => g.id === id ? { ...g, position } : g) })),
+  deleteGuide: (id) => set((s) => ({ guides: s.guides.filter((g) => g.id !== id) })),
+  clearGuides: () => set({ guides: [] }),
 }));

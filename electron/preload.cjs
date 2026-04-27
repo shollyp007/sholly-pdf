@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuZoomReset:    (cb) => ipcRenderer.on('menu:zoom-reset',    () => cb()),
   onMenuToggleLeft:   (cb) => ipcRenderer.on('menu:toggle-left',   () => cb()),
   onMenuCheckUpdates: (cb) => ipcRenderer.on('menu:check-updates', () => cb()),
+  onBeforeClose:      (cb) => ipcRenderer.on('app:before-close',  () => cb()),
+  confirmClose: () => ipcRenderer.send('app:confirm-close'),
 
   // Auto-updater
   updater: {

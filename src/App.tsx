@@ -9,6 +9,7 @@ import FindBar from './components/FindBar';
 import NewDocDialog from './components/NewDocDialog';
 import SaveDialog from './components/SaveDialog';
 import UpdateDialog from './components/UpdateDialog';
+import RulerArea from './components/Rulers';
 import type { DocPage, AppTab } from './types';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
@@ -242,7 +243,7 @@ function ViewDropdown({ canEdit }: { canEdit: boolean }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useMenuClose(btnRef, panelRef, setOpen);
   // Read live values for label display only — all fns use getState() for fresh values
-  const { scale, leftPanelOpen, rightPanelOpen } = useEditorStore();
+  const { scale, leftPanelOpen, rightPanelOpen, showRulers } = useEditorStore();
 
   const items: Array<MenuItem | null> = [
     {
@@ -269,6 +270,18 @@ function ViewDropdown({ canEdit }: { canEdit: boolean }) {
       label: rightPanelOpen ? 'Hide Properties'  : 'Show Properties',
       icon: '▶',
       fn: () => useEditorStore.getState().setRightPanelOpen(!useEditorStore.getState().rightPanelOpen),
+      disabled: !canEdit,
+    },
+    null,
+    {
+      label: showRulers ? 'Hide Rulers' : 'Show Rulers',
+      shortcut: '⌘R', icon: '📐',
+      fn: () => useEditorStore.getState().toggleRulers(),
+      disabled: !canEdit,
+    },
+    {
+      label: 'Clear Guides',
+      icon: '✕', fn: () => useEditorStore.getState().clearGuides(),
       disabled: !canEdit,
     },
   ];
@@ -492,6 +505,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [showSave, setShowSave] = useState(false);
+  const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const hasDoc = pages.length > 0;
 
@@ -550,6 +564,7 @@ export default function App() {
       if (m && e.key === 's') { e.preventDefault(); if (hasDoc) setShowSave(true); }
       if (m && e.key === 'p') { e.preventDefault(); window.print(); }
       if (m && e.key === 'f') { e.preventDefault(); if (hasDoc) useEditorStore.getState().setShowFindBar(!useEditorStore.getState().showFindBar); }
+      if (m && e.key === 'r') { e.preventDefault(); if (hasDoc) useEditorStore.getState().toggleRulers(); }
       if (m && e.key === 't') { e.preventDefault(); fileInputRef.current?.click(); }
 
       // Copy / cut / paste (skip when typing in an input)
@@ -574,6 +589,30 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo, hasDoc, deleteSelected, setActiveTool, setScale]);
+
+  // ── Unsaved changes warning ──────────────────────────────────────────────────
+  // Keep a ref so the close handler always reads current isDirty without stale closure
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
+  // Expose isDirty to Electron main process (read via executeJavaScript)
+  useEffect(() => { (window as any).__shollyIsDirty = isDirty; }, [isDirty]);
+
+  useEffect(() => {
+    // Browser fallback: warn on tab/window close
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    // Electron: main process sends this when the window X is clicked
+    const eAPI = (window as any).electronAPI;
+    eAPI?.onBeforeClose?.(() => {
+      if (!isDirtyRef.current) { eAPI.confirmClose(); return; }
+      setShowCloseWarning(true);
+    });
+
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []); // mount once — uses ref for isDirty
 
   // Electron native menu integration
   useEffect(() => {
@@ -722,13 +761,15 @@ export default function App() {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {hasDoc && leftPanelOpen && <Sidebar />}
 
-        <div style={{ flex: 1, overflow: 'auto', background: 'var(--canvas-bg)' }} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
-          {!hasDoc ? (
-            <Landing onNew={() => setShowNewDoc(true)} onOpen={() => fileInputRef.current?.click()} onDrop={onDrop} />
-          ) : (
+        {hasDoc ? (
+          <RulerArea onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
             <PDFViewer ref={viewerRef} />
-          )}
-        </div>
+          </RulerArea>
+        ) : (
+          <div style={{ flex: 1, overflow: 'auto', background: 'var(--canvas-bg)' }} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+            <Landing onNew={() => setShowNewDoc(true)} onOpen={() => fileInputRef.current?.click()} onDrop={onDrop} />
+          </div>
+        )}
 
         {hasDoc && rightPanelOpen && <PropertiesPanel />}
       </div>
@@ -767,6 +808,51 @@ export default function App() {
       {showNewDoc && <NewDocDialog onClose={() => setShowNewDoc(false)} />}
       {showSave   && <SaveDialog   onClose={() => setShowSave(false)}   canvasInfos={getCanvasInfos()} />}
       <UpdateDialog />
+
+      {/* ── Unsaved-changes close warning ── */}
+      {showCloseWarning && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 10000,
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--bg-panel, #1e2030)', border: '1px solid var(--border, #334)',
+            borderRadius: 12, padding: '28px 32px', width: 360, boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#eef0f8', marginBottom: 10 }}>Unsaved Changes</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', lineHeight: 1.6, marginBottom: 22 }}>
+              You have unsaved changes. If you close now, your edits will be lost.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                className="sp-btn"
+                onClick={() => setShowCloseWarning(false)}
+                style={{ fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                className="sp-btn"
+                onClick={() => { setShowCloseWarning(false); setShowSave(true); }}
+                style={{ fontSize: 13 }}
+              >
+                Save First…
+              </button>
+              <button
+                className="sp-btn"
+                onClick={() => {
+                  setShowCloseWarning(false);
+                  (window as any).electronAPI?.confirmClose?.();
+                }}
+                style={{ fontSize: 13, background: '#dc2626', color: '#fff', border: 'none' }}
+              >
+                Close Without Saving
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
