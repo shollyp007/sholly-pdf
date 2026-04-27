@@ -1,0 +1,163 @@
+name: Build Installers
+
+on:
+  push:
+    tags:
+      - 'v*'          # triggers on version tags like v1.0.1
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact_name: mac-installers
+          - os: windows-latest
+            platform: win
+            artifact_name: win-installer
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: linux-installers
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vite + TypeScript
+        run: npm run build
+
+      - name: Build Electron — macOS
+        if: matrix.platform == 'mac'
+        run: npx electron-builder --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uncomment and add secrets for notarization:
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          # CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+
+      - name: Build Electron — Windows
+        if: matrix.platform == 'win'
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uncomment and add secrets for code signing:
+          # CSC_LINK: ${{ secrets.WIN_CERT_P12_BASE64 }}
+          # CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+
+      - name: Build Electron — Linux
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS DMG (arm64)
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-mac-arm64-dmg
+          path: release/*.dmg
+          if-no-files-found: warn
+
+      - name: Upload macOS ZIP (arm64 + x64)
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-mac-zip
+          path: release/*.zip
+          if-no-files-found: warn
+
+      - name: Upload Windows NSIS installer
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-win-setup
+          path: release/*.exe
+          if-no-files-found: warn
+
+      - name: Upload Windows Portable EXE
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-win-portable
+          path: release/*Portable*.exe
+          if-no-files-found: warn
+
+      - name: Upload Linux AppImage
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-linux-AppImage
+          path: release/*.AppImage
+          if-no-files-found: warn
+
+      - name: Upload Linux DEB
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-linux-deb
+          path: release/*.deb
+          if-no-files-found: warn
+
+      - name: Upload Linux RPM
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-linux-rpm
+          path: release/*.rpm
+          if-no-files-found: warn
+
+  # ── Create a GitHub Release with all artifacts attached ─────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Sholly PDF ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: artifacts/**/*
+          body: |
+            ## Sholly PDF ${{ github.ref_name }}
+
+            ### Downloads
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | macOS (Apple Silicon) | `*-arm64.dmg` | Drag to Applications |
+            | macOS (Intel) | `*.dmg` (non-arm64) | Drag to Applications |
+            | Windows | `*Setup*.exe` | Standard installer |
+            | Windows | `*Portable*.exe` | No install needed |
+            | Linux | `*.AppImage` | `chmod +x` then run |
+            | Linux | `*.deb` | `sudo dpkg -i` |
+            | Linux | `*.rpm` | `sudo rpm -i` |
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

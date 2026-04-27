@@ -1,0 +1,309 @@
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import { useEditorStore, generateId } from '../store/editorStore';
+import AnnotationLayer from './AnnotationLayer';
+import FormFieldLayer from './FormFieldLayer';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+
+export interface CanvasInfo { width: number; height: number; dataUrl?: string; }
+export interface PDFViewerHandle { getCanvasInfos: () => CanvasInfo[]; }
+
+interface PageState { pageId: string; canvasWidth: number; canvasHeight: number; }
+interface TextItem { str: string; x: number; y: number; w: number; h: number; fontSize: number; }
+
+// ── Text layer for a single page ─────────────────────────────────────────────
+function TextLayer({ pageId, pdfPage, scale, width, height }: {
+  pageId: string; pdfPage: pdfjsLib.PDFPageProxy | null;
+  scale: number; width: number; height: number;
+}) {
+  const [items, setItems] = useState<TextItem[]>([]);
+  const { activeTool, highlightColor, strokeColor, highlightOpacity, addAnnotation, setPendingEditTextId } = useEditorStore();
+
+  useEffect(() => {
+    if (!pdfPage) { setItems([]); return; }
+    pdfPage.getTextContent().then((content) => {
+      const vp = pdfPage.getViewport({ scale });
+      const list: TextItem[] = [];
+      for (const item of content.items) {
+        if (!('str' in item) || !item.str.trim()) continue;
+        const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
+        const x = tx[4];
+        const h = Math.abs(tx[3]) || 12;
+        const y = tx[5] - h;
+        const w = item.width * scale;
+        list.push({ str: item.str, x, y, w, h, fontSize: h * 0.85 });
+      }
+      setItems(list);
+    }).catch(() => setItems([]));
+  }, [pdfPage, scale]);
+
+  const canApplyMarkup = activeTool === 'highlight' || activeTool === 'underline' || activeTool === 'strikethrough';
+  const isEditText = activeTool === 'edit-text';
+
+  function onTextMouseUp() {
+    if (!canApplyMarkup) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const rects = Array.from(range.getClientRects());
+    if (!rects.length) return;
+
+    const layerEl = document.getElementById(`text-layer-${pageId}`);
+    if (!layerEl) return;
+    const base = layerEl.getBoundingClientRect();
+
+    for (const r of rects) {
+      const x = r.left - base.left, y = r.top - base.top;
+      const w = r.width, h = r.height;
+      if (w < 2) continue;
+      const common = { id: generateId(), pageId };
+      if (activeTool === 'highlight')
+        addAnnotation({ ...common, type: 'highlight', x, y: y - 2, width: w, height: h + 4, color: highlightColor, opacity: highlightOpacity });
+      else if (activeTool === 'underline')
+        addAnnotation({ ...common, type: 'underline', x, y, width: w, height: h, color: strokeColor, strokeWidth: 2 });
+      else if (activeTool === 'strikethrough')
+        addAnnotation({ ...common, type: 'strikethrough', x, y, width: w, height: h, color: strokeColor, strokeWidth: 2 });
+    }
+    sel.removeAllRanges();
+  }
+
+  function onSpanClick(e: React.MouseEvent, item: TextItem) {
+    if (!isEditText) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const coverId = generateId();
+    const textId = generateId();
+
+    // White cover rectangle to hide the original PDF text under the edit
+    addAnnotation({
+      id: coverId, type: 'cover', pageId,
+      x: item.x - 1, y: item.y - 1,
+      width: item.w + 2, height: item.h + 4,
+    });
+
+    // Editable text annotation placed over the original text
+    addAnnotation({
+      id: textId, type: 'text', pageId,
+      x: item.x, y: item.y,
+      content: item.str,
+      fontSize: item.fontSize,
+      color: '#000000',
+      fontFamily: 'Arial',
+      fontStack: 'Arial, sans-serif',
+      bold: false, italic: false, underline: false,
+      align: 'left',
+      coverAnnId: coverId,
+    });
+
+    // Signal AnnotationLayer to enter edit mode, then switch back to select tool
+    setPendingEditTextId(textId);
+    useEditorStore.getState().setActiveTool('select');
+  }
+
+  const isMarkupOrSelect = activeTool === 'highlight' || activeTool === 'underline' ||
+                           activeTool === 'strikethrough' || activeTool === 'select';
+
+  return (
+    <div
+      id={`text-layer-${pageId}`}
+      onMouseUp={onTextMouseUp}
+      style={{
+        position: 'absolute', top: 0, left: 0, width, height,
+        userSelect: isMarkupOrSelect ? 'text' : 'none',
+        // edit-text needs pointer events too (AnnotationLayer is set to none when edit-text is active)
+        pointerEvents: (isMarkupOrSelect || isEditText) ? 'auto' : 'none',
+        overflow: 'hidden',
+        zIndex: 1,
+      }}
+    >
+      {items.map((item, i) => (
+        <span
+          key={i}
+          onClick={(e) => onSpanClick(e, item)}
+          style={{
+            position: 'absolute',
+            left: item.x, top: item.y,
+            width: item.w, height: item.h,
+            fontSize: item.fontSize,
+            fontFamily: 'sans-serif',
+            lineHeight: 1,
+            whiteSpace: 'pre',
+            color: 'transparent',
+            cursor: isEditText ? 'text' : (isMarkupOrSelect ? 'text' : 'default'),
+            overflow: 'hidden',
+          }}
+        >
+          {item.str}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Main PDF Viewer ───────────────────────────────────────────────────────────
+const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
+  const { pages, originalPdfBytes, scale, currentPageId, setCurrentPageId } = useEditorStore();
+  const [pageStates, setPageStates] = useState<PageState[]>([]);
+  const [pdfPages, setPdfPages] = useState<Map<string, pdfjsLib.PDFPageProxy>>(new Map());
+  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const containerRef = useRef<HTMLDivElement>(null);
+  const renderGen = useRef(0); // generation counter to cancel stale renders
+
+  useImperativeHandle(ref, () => ({
+    getCanvasInfos: () => pageStates.map((ps) => ({
+      width: ps.canvasWidth,
+      height: ps.canvasHeight,
+      dataUrl: canvasRefs.current.get(ps.pageId)?.toDataURL('image/jpeg', 0.92),
+    })),
+  }));
+
+  // ── Load PDF document ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!originalPdfBytes) { setPdfDoc(null); setPdfPages(new Map()); return; }
+    pdfjsLib.getDocument({ data: originalPdfBytes.slice(0) }).promise.then((pdf) => {
+      setPdfDoc(pdf);
+    });
+  }, [originalPdfBytes]);
+
+  // ── Compute page canvas sizes ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!pages.length) { setPageStates([]); return; }
+    async function compute() {
+      const states: PageState[] = [];
+      const newPdfPages = new Map<string, pdfjsLib.PDFPageProxy>();
+      for (const page of pages) {
+        let w: number, h: number;
+        if (page.source === 'original' && pdfDoc && page.originalIndex !== undefined) {
+          const pdfPage = await pdfDoc.getPage(page.originalIndex + 1);
+          const vp = pdfPage.getViewport({ scale, rotation: page.rotation });
+          w = vp.width; h = vp.height;
+          newPdfPages.set(page.id, pdfPage);
+        } else {
+          const rotated = page.rotation === 90 || page.rotation === 270;
+          w = (rotated ? page.pdfHeight : page.pdfWidth) * scale;
+          h = (rotated ? page.pdfWidth : page.pdfHeight) * scale;
+        }
+        states.push({ pageId: page.id, canvasWidth: Math.round(w), canvasHeight: Math.round(h) });
+      }
+      setPageStates(states);
+      setPdfPages(newPdfPages);
+    }
+    compute();
+  }, [pages, scale, pdfDoc]);
+
+  // ── Render pages onto canvas ────────────────────────────────────────────────
+  const renderPages = useCallback(async () => {
+    const gen = ++renderGen.current;
+    for (const ps of pageStates) {
+      if (gen !== renderGen.current) break; // cancelled
+      const page = pages.find((p) => p.id === ps.pageId);
+      if (!page || page.source !== 'original' || page.originalIndex === undefined) continue;
+      const canvas = canvasRefs.current.get(ps.pageId);
+      if (!canvas) continue;
+      if (!pdfDoc) continue;
+      try {
+        const pdfPage = await pdfDoc.getPage(page.originalIndex + 1);
+        const vp = pdfPage.getViewport({ scale, rotation: page.rotation });
+        // Guard: if the viewport size doesn't match what pageStates expects, compute()
+        // hasn't caught up to the current scale yet. Skip this render cycle — the next
+        // firing (after compute() updates pageStates) will have matching sizes.
+        if (Math.round(vp.width) !== ps.canvasWidth || Math.round(vp.height) !== ps.canvasHeight) continue;
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.clearRect(0, 0, vp.width, vp.height);
+        await pdfPage.render({ canvasContext: ctx, viewport: vp, canvas }).promise;
+      } catch { /* ignore */ }
+    }
+  }, [pageStates, scale, pages, pdfDoc]);
+
+  useEffect(() => { renderPages(); }, [renderPages]);
+
+  // ── Scroll to current page ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentPageId) return;
+    document.getElementById(`page-wrap-${currentPageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [currentPageId]);
+
+  if (!pages.length) return null;
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28, padding: '28px 40px' }}
+    >
+      {pageStates.map((ps, idx) => {
+        const page = pages.find((p) => p.id === ps.pageId);
+        if (!page) return null;
+        const isCurrent = ps.pageId === currentPageId;
+        const pdfPage = pdfPages.get(ps.pageId) ?? null;
+
+        return (
+          <div
+            key={ps.pageId}
+            id={`page-wrap-${ps.pageId}`}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}
+            onClick={() => setCurrentPageId(ps.pageId)}
+          >
+            {/* Page label */}
+            <div style={{ fontSize: 11, color: isCurrent ? '#7eb3ff' : '#555', userSelect: 'none', fontWeight: isCurrent ? 600 : 400, transition: 'color 0.15s' }}>
+              Page {idx + 1}
+            </div>
+
+            {/* Page wrapper */}
+            <div
+              className="pdf-page-wrap"
+              style={{
+                width: ps.canvasWidth, height: ps.canvasHeight,
+                outline: isCurrent ? '2px solid #4f7bff' : '1px solid rgba(0,0,0,0.15)',
+                outlineOffset: isCurrent ? 2 : 0,
+                transition: 'outline 0.15s',
+              }}
+            >
+              {/* PDF canvas (original pages) or blank white (new pages) */}
+              {page.source === 'blank' ? (
+                <div style={{ width: ps.canvasWidth, height: ps.canvasHeight, background: 'white' }} />
+              ) : (
+                <canvas
+                  ref={(el) => {
+                    if (el) canvasRefs.current.set(ps.pageId, el);
+                    else canvasRefs.current.delete(ps.pageId);
+                  }}
+                  style={{ display: 'block', width: ps.canvasWidth, height: ps.canvasHeight }}
+                />
+              )}
+
+              {/* Text layer — for text selection → markup */}
+              {page.source === 'original' && pdfPage && (
+                <TextLayer
+                  pageId={ps.pageId}
+                  pdfPage={pdfPage}
+                  scale={scale}
+                  width={ps.canvasWidth}
+                  height={ps.canvasHeight}
+                />
+              )}
+
+              {/* Form field layer — renders AcroForm widgets */}
+              {page.source === 'original' && pdfPage && (
+                <FormFieldLayer pdfPage={pdfPage} scale={scale} />
+              )}
+
+              {/* Annotation interaction layer — above text and form layers */}
+              <AnnotationLayer
+                pageId={ps.pageId}
+                width={ps.canvasWidth}
+                height={ps.canvasHeight}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+export default PDFViewer;
