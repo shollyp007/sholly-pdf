@@ -6,15 +6,24 @@ const { autoUpdater } = require('electron-updater')
 // ── Auto-updater setup ─────────────────────────────────────────────────────────
 autoUpdater.autoDownload = false          // don't download silently; ask user first
 autoUpdater.autoInstallOnAppQuit = false  // we'll prompt instead
+autoUpdater.logger = null                 // suppress noisy console logs
+
+// Track whether the check was user-initiated (via Help menu) or silent (background)
+let userInitiatedCheck = false
 
 autoUpdater.on('update-available', (info) => {
   mainWindow?.webContents.send('updater:available', info)
+  userInitiatedCheck = false
 })
 autoUpdater.on('update-not-available', () => {
-  mainWindow?.webContents.send('updater:not-available')
+  // Only notify the UI if the user explicitly asked
+  if (userInitiatedCheck) mainWindow?.webContents.send('updater:not-available')
+  userInitiatedCheck = false
 })
 autoUpdater.on('error', (err) => {
-  mainWindow?.webContents.send('updater:error', err.message)
+  // Only surface errors to the user if they initiated the check themselves
+  if (userInitiatedCheck) mainWindow?.webContents.send('updater:error', err.message)
+  userInitiatedCheck = false
 })
 autoUpdater.on('download-progress', (p) => {
   mainWindow?.webContents.send('updater:progress', Math.round(p.percent))
@@ -140,7 +149,12 @@ ipcMain.handle('get-version', () => app.getVersion())
 
 // ── IPC: Auto-updater controls ────────────────────────────────────────────────
 ipcMain.handle('updater:check', async () => {
-  try { await autoUpdater.checkForUpdates() } catch (e) { /* ignore in dev */ }
+  try {
+    userInitiatedCheck = true
+    await autoUpdater.checkForUpdates()
+  } catch (e) {
+    userInitiatedCheck = false
+  }
 })
 ipcMain.handle('updater:download', async () => {
   await autoUpdater.downloadUpdate()
@@ -249,7 +263,12 @@ function buildMenu() {
           label: 'Check for Updates…',
           click: async () => {
             mainWindow?.webContents.send('menu:check-updates')
-            try { await autoUpdater.checkForUpdates() } catch (e) { /* ignore in dev */ }
+            try {
+              userInitiatedCheck = true
+              await autoUpdater.checkForUpdates()
+            } catch (e) {
+              userInitiatedCheck = false
+            }
           },
         },
         { type: 'separator' },

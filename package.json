@@ -160,7 +160,6 @@
       "provider": "github",
       "owner": "shollyp007",
       "repo": "sholly-pdf",
-      "private": true,
       "releaseType": "release"
     }
   },
