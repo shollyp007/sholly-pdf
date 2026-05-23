@@ -226,6 +226,10 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
   // ── Render pages onto canvas ────────────────────────────────────────────────
   const renderPages = useCallback(async () => {
     const gen = ++renderGen.current;
+    // Render at device pixel ratio so text is sharp on Retina / HiDPI displays.
+    // pageStates stores CSS pixel dimensions; the canvas element is larger internally
+    // but displayed at CSS size via canvas.style.width/height.
+    const dpr = window.devicePixelRatio || 1;
     for (const ps of pageStates) {
       if (gen !== renderGen.current) break; // cancelled
       const page = pages.find((p) => p.id === ps.pageId);
@@ -235,16 +239,18 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
       if (!pdfDoc) continue;
       try {
         const pdfPage = await pdfDoc.getPage(page.originalIndex + 1);
-        const vp = pdfPage.getViewport({ scale, rotation: page.rotation });
-        // Guard: if the viewport size doesn't match what pageStates expects, compute()
-        // hasn't caught up to the current scale yet. Skip this render cycle — the next
-        // firing (after compute() updates pageStates) will have matching sizes.
-        if (Math.round(vp.width) !== ps.canvasWidth || Math.round(vp.height) !== ps.canvasHeight) continue;
-        canvas.width = vp.width;
-        canvas.height = vp.height;
+        // Guard against stale pageStates using CSS-pixel viewport
+        const vpCss = pdfPage.getViewport({ scale, rotation: page.rotation });
+        if (Math.round(vpCss.width) !== ps.canvasWidth || Math.round(vpCss.height) !== ps.canvasHeight) continue;
+        // Render at full physical resolution
+        const vpHiDpi = pdfPage.getViewport({ scale: scale * dpr, rotation: page.rotation });
+        canvas.width = Math.round(vpHiDpi.width);
+        canvas.height = Math.round(vpHiDpi.height);
+        canvas.style.width = ps.canvasWidth + 'px';
+        canvas.style.height = ps.canvasHeight + 'px';
         const ctx = canvas.getContext('2d')!;
-        ctx.clearRect(0, 0, vp.width, vp.height);
-        await pdfPage.render({ canvasContext: ctx, viewport: vp, canvas }).promise;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        await pdfPage.render({ canvasContext: ctx, viewport: vpHiDpi, canvas }).promise;
       } catch { /* ignore */ }
     }
   }, [pageStates, scale, pages, pdfDoc]);

@@ -26,15 +26,18 @@ export default function Sidebar() {
   useEffect(() => { renderThumbs(); }, [pages]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function renderThumbs() {
+    const dpr = window.devicePixelRatio || 1;
+    const thumbScale = 0.18;
     const map = new Map<string, string>();
     for (const page of pages) {
       if (page.source === 'original' && pdfRef.current && page.originalIndex !== undefined) {
         try {
           const p = await pdfRef.current.getPage(page.originalIndex + 1);
-          const vp = p.getViewport({ scale: 0.18, rotation: page.rotation });
+          const vpHiDpi = p.getViewport({ scale: thumbScale * dpr, rotation: page.rotation });
           const canvas = document.createElement('canvas');
-          canvas.width = vp.width; canvas.height = vp.height;
-          await p.render({ canvasContext: canvas.getContext('2d')!, viewport: vp, canvas }).promise;
+          canvas.width = Math.round(vpHiDpi.width);
+          canvas.height = Math.round(vpHiDpi.height);
+          await p.render({ canvasContext: canvas.getContext('2d')!, viewport: vpHiDpi, canvas }).promise;
           map.set(page.id, canvas.toDataURL());
         } catch { /* skip */ }
       }
