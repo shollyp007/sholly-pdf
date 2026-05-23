@@ -11,7 +11,7 @@ export interface CanvasInfo { width: number; height: number; dataUrl?: string; }
 export interface PDFViewerHandle { getCanvasInfos: () => CanvasInfo[]; }
 
 interface PageState { pageId: string; canvasWidth: number; canvasHeight: number; }
-interface TextItem { str: string; x: number; y: number; w: number; h: number; fontSize: number; }
+interface TextItem { str: string; x: number; y: number; w: number; h: number; fontSize: number; fontFamily: string; }
 
 // ── Text layer for a single page ─────────────────────────────────────────────
 function TextLayer({ pageId, pdfPage, scale, width, height }: {
@@ -32,8 +32,11 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
         const x = tx[4];
         const h = Math.abs(tx[3]) || 12;
         const y = tx[5] - h;
-        const w = item.width * scale;
-        list.push({ str: item.str, x, y, w, h, fontSize: h * 0.85 });
+        const w = (item as any).width * scale;
+        // Detect the CSS font family that PDF.js maps this font to
+        const fontStyle = (content.styles as any)?.[(item as any).fontName] as { fontFamily?: string } | undefined;
+        const fontFamily = fontStyle?.fontFamily || 'sans-serif';
+        list.push({ str: item.str, x, y, w, h, fontSize: h * 0.85, fontFamily });
       }
       setItems(list);
     }).catch(() => setItems([]));
@@ -69,35 +72,47 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
     sel.removeAllRanges();
   }
 
-  function onSpanClick(e: React.MouseEvent, item: TextItem) {
+  function onSpanClick(e: React.MouseEvent, clickedItem: TextItem) {
     if (!isEditText) return;
     e.stopPropagation();
     e.preventDefault();
 
-    const coverId = generateId();
+    // Group all text items on the same visual line (within half a line-height vertically)
+    // and sort left-to-right so the text reads naturally
+    const lineItems = items
+      .filter((other) => Math.abs(other.y - clickedItem.y) < clickedItem.h * 0.6)
+      .sort((a, b) => a.x - b.x);
+
+    const minX = Math.min(...lineItems.map((i) => i.x));
+    const maxX = Math.max(...lineItems.map((i) => i.x + i.w));
+    const minY = Math.min(...lineItems.map((i) => i.y));
+    const maxH = Math.max(...lineItems.map((i) => i.h));
+    const lineText = lineItems.map((i) => i.str).join(' ');
+    const fontFamily = clickedItem.fontFamily || 'sans-serif';
+    const lineW = maxX - minX;
+
     const textId = generateId();
 
-    // White cover rectangle to hide the original PDF text under the edit
-    addAnnotation({
-      id: coverId, type: 'cover', pageId,
-      x: item.x - 1, y: item.y - 1,
-      width: item.w + 2, height: item.h + 4,
-    });
-
-    // Editable text annotation placed over the original text
+    // Create the editable text overlay matching the original line's font + position.
+    // The cover rect (white rectangle to hide original text) is NOT created here — it is
+    // created lazily by InlineEditor on the first keystroke, so clicking text shows no box.
     addAnnotation({
       id: textId, type: 'text', pageId,
-      x: item.x, y: item.y,
-      content: item.str,
-      fontSize: item.fontSize,
+      x: minX, y: minY,
+      width: lineW, height: maxH,
+      content: lineText,
+      originalContent: lineText,   // remembered so blur can detect whether anything changed
+      fontSize: clickedItem.fontSize,
       color: '#000000',
-      fontFamily: 'Arial',
-      fontStack: 'Arial, sans-serif',
+      fontFamily,
+      fontStack: fontFamily,
+      detectedFontFamily: fontFamily,
       bold: false, italic: false, underline: false,
       align: 'left',
-      coverAnnId: coverId,
-    });
+    } as any);
 
+    // Store click coordinates so the editor can place cursor at the exact click position
+    useEditorStore.getState().setPendingEditClickPos({ x: e.clientX, y: e.clientY });
     // Signal AnnotationLayer to enter edit mode, then switch back to select tool
     setPendingEditTextId(textId);
     useEditorStore.getState().setActiveTool('select');

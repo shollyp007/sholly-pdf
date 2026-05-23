@@ -11,8 +11,11 @@ export interface Point { x: number; y: number; }
 export interface TextAnnotation {
   id: string; type: 'text'; pageId: string;
   x: number; y: number;
+  width?: number; height?: number;       // set when grouping a full line from existing PDF text
   content: string; fontSize: number; color: string;
   fontFamily: string; fontStack: string;
+  detectedFontFamily?: string;           // CSS font-family read directly from the PDF via PDF.js
+  originalContent?: string;             // original PDF text at click time; used to detect changes on commit
   bold: boolean; italic: boolean; underline: boolean;
   align: 'left' | 'center' | 'right';
   coverAnnId?: string; // id of paired CoverAnnotation (when created via edit-text tool)

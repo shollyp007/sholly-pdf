@@ -687,9 +687,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
         const textAnn = ann as TextAnnotation;
         const isEditing = editingTextId === ann.id;
         const sel = selectedIds.includes(ann.id);
-        // Pass-through to annotation layer when not editing (select/drag/resize handled there)
         const pe = activeTool === 'select' && !isEditing ? 'none' : 'all';
-        const RESERVE = 44;
         return (
           <div
             key={ann.id}
@@ -701,10 +699,12 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
               pointerEvents: pe,
             }}
           >
-            <TextInput
+            <InlineEditor
               ann={textAnn}
               selected={sel}
               editing={isEditing}
+              pageHeight={height}
+              pageId={pageId}
               onDelete={() => { deleteAnnotation(ann.id); setEditingTextId(null); }}
               onUpdate={(u) => updateAnnotation(ann.id, u as any)}
               onSelect={() => setSelectedIds([ann.id])}
@@ -771,56 +771,152 @@ export function getBounds(ann: Annotation): { x: number; y: number; w: number; h
     const x = Math.min(ann.x1, ann.x2), y = Math.min(ann.y1, ann.y2);
     return { x, y, w: Math.abs(ann.x2 - ann.x1) || 1, h: Math.abs(ann.y2 - ann.y1) || 1 };
   }
-  if (ann.type === 'text')   return { x: ann.x, y: ann.y, w: 200, h: ann.fontSize * 1.6 };
+  if (ann.type === 'text')   return { x: ann.x, y: ann.y, w: ann.width ?? 200, h: ann.height ?? ann.fontSize * 1.6 };
   if (ann.type === 'sticky') return { x: ann.x, y: ann.y, w: 28, h: 28 };
   if ('x' in ann && 'width' in ann) return { x: (ann as any).x, y: (ann as any).y, w: (ann as any).width, h: (ann as any).height };
   return null;
 }
 
-// ── Text input component ──────────────────────────────────────────────────────
-// The wrapper div is positioned 44px ABOVE ann.y (RESERVE=44) so the toolbar
-// (absolute, top:-40) renders above the text box without clipping.
-// The outer div's marginTop:44 compensates so the textarea renders at ann.y.
-function TextInput({ ann, selected, editing, onDelete, onUpdate, onSelect, onBlurEmpty }: {
+// ── Inline text editor (contenteditable) ─────────────────────────────────────
+// Positioned so the editing div sits exactly at ann.y.
+// The wrapper div starts RESERVE px above so the floating toolbar has room.
+const RESERVE = 42;
+
+function placeCursorAtEnd(el: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+}
+
+function caretRangeAt(x: number, y: number): Range | null {
+  if (document.caretRangeFromPoint) {
+    return document.caretRangeFromPoint(x, y);
+  }
+  // Firefox
+  const pos = (document as any).caretPositionFromPoint?.(x, y);
+  if (pos) {
+    const r = document.createRange();
+    r.setStart(pos.offsetNode, pos.offset);
+    r.collapse(true);
+    return r;
+  }
+  return null;
+}
+
+function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, onBlurEmpty, pageHeight, pageId }: {
   ann: TextAnnotation; selected: boolean; editing: boolean;
   onDelete: () => void; onUpdate: (u: Partial<TextAnnotation>) => void;
   onSelect: () => void; onBlurEmpty: () => void;
+  pageHeight: number; pageId: string;
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const divRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
+  const autoPagedRef = useRef(false);
+  // True once the user has actually typed something in this edit session
+  const coverCreatedRef = useRef(!!(ann as any).coverAnnId);
+  const { addBlankPage } = useEditorStore();
 
-  // Focus the textarea when entering edit mode; blur it when leaving so
-  // keyboard focus returns to <body> and global copy/paste shortcuts work.
+  // On entering edit mode: set content once, place cursor at click position.
   useLayoutEffect(() => {
-    if (editing && ref.current) {
-      ref.current.focus();
-      const len = ref.current.value.length;
-      ref.current.setSelectionRange(len, len);
-    } else if (!editing && ref.current) {
-      ref.current.blur();
+    const el = divRef.current;
+    if (!el) return;
+
+    if (editing && !initializedRef.current) {
+      initializedRef.current = true;
+      autoPagedRef.current = false;
+      coverCreatedRef.current = !!(ann as any).coverAnnId;
+      el.innerText = ann.content;
+      el.focus();
+
+      // Read and clear the pending click position from the store (direct access avoids re-render)
+      const store = useEditorStore.getState();
+      const clickPos = store.pendingEditClickPos;
+      if (clickPos) {
+        store.setPendingEditClickPos(null);
+        const range = caretRangeAt(clickPos.x, clickPos.y);
+        if (range && el.contains(range.startContainer)) {
+          window.getSelection()?.removeAllRanges();
+          window.getSelection()?.addRange(range);
+        } else {
+          placeCursorAtEnd(el);
+        }
+      } else {
+        placeCursorAtEnd(el);
+      }
+    } else if (!editing) {
+      initializedRef.current = false;
+      el.blur();
     }
   }, [editing]);
 
-  // Escape key: commit / discard empty box and exit edit mode.
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      if (!ann.content.trim()) onBlurEmpty();
-      else ref.current?.blur();
+  // Auto-add a blank page when the editor content overflows the page bottom.
+  useEffect(() => {
+    if (!editing || !divRef.current) return;
+    const el = divRef.current;
+    const observer = new ResizeObserver(() => {
+      if (autoPagedRef.current) return;
+      if (ann.y + el.offsetHeight > pageHeight - 10) {
+        autoPagedRef.current = true;
+        addBlankPage(pageId);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [editing, ann.y, pageHeight, pageId, addBlankPage]);
+
+  function handleInput() {
+    if (!divRef.current) return;
+    const content = divRef.current.innerText;
+    onUpdate({ content });
+
+    // Lazily create the cover rect on the FIRST keystroke so clicking text shows no box.
+    if (!coverCreatedRef.current) {
+      coverCreatedRef.current = true;
+      const store = useEditorStore.getState();
+      const coverId = generateId();
+      store.addAnnotation({
+        id: coverId, type: 'cover', pageId,
+        x: ann.x - 2, y: ann.y - 2,
+        width: (ann.width ?? 200) + 4,
+        height: (ann.height ?? ann.fontSize * 1.6) + 4,
+      });
+      store.updateAnnotation(ann.id, { coverAnnId: coverId } as any);
     }
   }
 
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      if (!ann.content.trim()) onBlurEmpty();
+      else divRef.current?.blur();
+    }
+    // Enter is handled natively by contenteditable — inserts a line break at the cursor
+  }
+
+  function handleBlur() {
+    const content = divRef.current?.innerText ?? '';
+    const original = (ann as any).originalContent as string | undefined;
+    // Delete the annotation if: empty, OR original text-in-place edit with no changes made
+    if (!content.trim() || (!coverCreatedRef.current && original !== undefined && content === original)) {
+      onBlurEmpty();
+    }
+  }
+
+  const fontToUse = (ann as any).detectedFontFamily || ann.fontStack || ann.fontFamily || 'sans-serif';
+
   return (
-    // marginTop: 44 pushes the textarea to ann.y (wrapper div starts 44px above)
     <div
-      style={{ position: 'relative', display: 'inline-block', minWidth: 80, marginTop: 44, userSelect: 'text' }}
+      style={{ position: 'relative', display: 'inline-block', minWidth: 10, marginTop: RESERVE, userSelect: editing ? 'text' : 'none' }}
       onClick={(e) => { e.stopPropagation(); onSelect(); }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {editing && (
-        // toolbar at top:-40, within the 44px reserved area above ann.y
         <div
           style={{
-            position: 'absolute', top: -40, left: 0, display: 'flex', gap: 3, zIndex: 30,
+            position: 'absolute', top: -(RESERVE - 4), left: 0,
+            display: 'flex', gap: 3, zIndex: 30,
             background: 'linear-gradient(160deg,#1c2235,#161d2e)', borderRadius: 8, padding: '4px 6px',
             boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(79,123,255,0.2)',
             whiteSpace: 'nowrap',
@@ -843,30 +939,38 @@ function TextInput({ ann, selected, editing, onDelete, onUpdate, onSelect, onBlu
             style={{ fontSize: 11, color: '#f87171', border: 'none', background: 'none', cursor: 'pointer', padding: '1px 4px' }}>✕</button>
         </div>
       )}
-      <textarea
-        ref={ref}
-        tabIndex={0}
-        autoFocus={editing}
-        value={ann.content}
-        onChange={(e) => onUpdate({ content: e.target.value })}
+      <div
+        ref={divRef}
+        contentEditable={editing}
+        suppressContentEditableWarning
+        onInput={handleInput}
         onKeyDown={handleKeyDown}
-        placeholder={editing ? 'Type here…' : ''}
+        onBlur={handleBlur}
         style={{
           display: 'block',
-          fontSize: ann.fontSize, color: ann.color, fontFamily: ann.fontStack || ann.fontFamily,
-          fontWeight: ann.bold ? 'bold' : 'normal', fontStyle: ann.italic ? 'italic' : 'normal',
-          textDecoration: ann.underline ? 'underline' : 'none', textAlign: ann.align || 'left',
-          border: editing
-            ? '1.5px dashed rgba(79,123,255,0.7)'
-            : selected ? '1.5px dashed rgba(79,123,255,0.3)' : '1.5px dashed transparent',
-          background: editing ? 'rgba(255,255,255,0.04)' : 'transparent',
-          borderRadius: 3, padding: '3px 6px',
-          minWidth: 80, minHeight: ann.fontSize * 1.6, maxWidth: 500,
-          resize: editing ? 'both' : 'none',
-          outline: 'none', lineHeight: 1.4, overflow: 'hidden',
+          fontSize: ann.fontSize,
+          color: ann.color,
+          fontFamily: fontToUse,
+          fontWeight: ann.bold ? 'bold' : 'normal',
+          fontStyle: ann.italic ? 'italic' : 'normal',
+          textDecoration: ann.underline ? 'underline' : 'none',
+          textAlign: ann.align || 'left',
+          // Zero visible border — the blinking cursor is the only edit indicator
+          outline: 'none',
+          border: selected && !editing ? '1px dashed rgba(79,123,255,0.25)' : '1px solid transparent',
+          background: 'transparent',
+          caretColor: '#2563eb',
+          borderRadius: 2,
+          padding: '0 1px',
+          minWidth: 10,
+          minHeight: ann.fontSize * 1.3,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          lineHeight: 1.3,
           cursor: editing ? 'text' : 'default',
-          pointerEvents: editing ? 'auto' : 'none',
-          userSelect: 'text',
+          userSelect: editing ? 'text' : 'none',
+          pointerEvents: editing ? 'all' : 'none',
+          boxSizing: 'border-box',
         }}
       />
     </div>

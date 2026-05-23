@@ -85,7 +85,7 @@ function createWindow() {
     title: 'Sholly PDF',
     backgroundColor: '#1a1a1a',
     show: false,
-    ...(process.platform === 'darwin' && { vibrancy: 'sidebar' }),
+    // vibrancy removed — macOS window compositing causes significant startup lag
   })
 
   // Prevent navigation away from the app

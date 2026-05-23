@@ -187,6 +187,10 @@ interface EditorState {
   pendingEditTextId: string | null;
   setPendingEditTextId: (id: string | null) => void;
 
+  // Viewport click coordinates from the edit-text click; used to place cursor at exact position
+  pendingEditClickPos: { x: number; y: number } | null;
+  setPendingEditClickPos: (pos: { x: number; y: number } | null) => void;
+
   // Ruler guides (view-only, not saved to PDF)
   showRulers: boolean;
   guides: Guide[];
@@ -250,6 +254,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   lastSavedHandle: null,
   formFieldValues: {},
   pendingEditTextId: null,
+  pendingEditClickPos: null,
 
   showRulers: true,
   guides: [],
@@ -564,6 +569,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   })),
 
   setPendingEditTextId: (pendingEditTextId) => set({ pendingEditTextId }),
+  setPendingEditClickPos: (pendingEditClickPos) => set({ pendingEditClickPos }),
 
   toggleRulers: () => set((s) => ({ showRulers: !s.showRulers })),
   addGuide: (g) => set((s) => ({ guides: [...s.guides, g] })),
