@@ -105,22 +105,35 @@ export default function FormFieldLayer({ pdfPage, scale }: Props) {
         };
 
         if (field.fieldType === 'Btn' && field.checkBox) {
+          const isChecked = !!value;
+          const size = Math.min(w, h) * 0.65;
           return (
-            <input
+            <div
               key={field.key}
-              type="checkbox"
-              checked={!!value}
-              readOnly={field.readOnly}
-              onChange={(e) => { if (!field.readOnly) setFormFieldValue(storeKey, e.target.checked); }}
+              role="checkbox"
+              aria-checked={isChecked}
+              onClick={() => { if (!field.readOnly) setFormFieldValue(storeKey, !isChecked); }}
               style={{
-                position: 'absolute',
-                left: x + w / 2 - 8, top: y + h / 2 - 8,
-                width: 16, height: 16,
+                position: 'absolute', left: x, top: y, width: w, height: h,
                 cursor: field.readOnly ? 'default' : 'pointer',
                 pointerEvents: field.readOnly ? 'none' : 'all',
-                accentColor: '#3b82f6',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxSizing: 'border-box',
               }}
-            />
+            >
+              {isChecked && (
+                <svg width={size} height={size} viewBox="0 0 12 12" style={{ pointerEvents: 'none' }}>
+                  <polyline
+                    points="1.5,6 4.5,9.5 10.5,2"
+                    stroke="#1d4ed8"
+                    strokeWidth="2.2"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </div>
           );
         }
 

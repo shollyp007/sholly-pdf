@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useEditorStore, generateId } from '../store/editorStore';
+import { pdfDocCache } from '../lib/pdfCache';
 import AnnotationLayer from './AnnotationLayer';
 import FormFieldLayer from './FormFieldLayer';
 
@@ -144,7 +145,7 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
 
 // ── Main PDF Viewer ───────────────────────────────────────────────────────────
 const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
-  const { pages, originalPdfBytes, scale, currentPageId, setCurrentPageId } = useEditorStore();
+  const { pages, pdfFile, originalPdfBytes, scale, currentPageId, setCurrentPageId } = useEditorStore();
   const [pageStates, setPageStates] = useState<PageState[]>([]);
   const [pdfPages, setPdfPages] = useState<Map<string, pdfjsLib.PDFPageProxy>>(new Map());
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -160,24 +161,34 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
     })),
   }));
 
-  // ── Load PDF document ───────────────────────────────────────────────────────
+  // ── Load PDF document (use cache from App.tsx to avoid re-parsing) ──────────
   useEffect(() => {
-    if (!originalPdfBytes) { setPdfDoc(null); setPdfPages(new Map()); return; }
+    if (!originalPdfBytes || !pdfFile) { setPdfDoc(null); setPdfPages(new Map()); return; }
+    const cached = pdfDocCache.get(pdfFile);
+    if (cached) { setPdfDoc(cached); return; }
+    // Fallback: parse if not cached (e.g. Electron menu open)
+    let active = true;
     pdfjsLib.getDocument({ data: originalPdfBytes.slice(0) }).promise.then((pdf) => {
+      if (!active) return;
+      pdfDocCache.set(pdfFile, pdf);
       setPdfDoc(pdf);
     });
-  }, [originalPdfBytes]);
+    return () => { active = false; };
+  }, [originalPdfBytes, pdfFile]);
 
   // ── Compute page canvas sizes ───────────────────────────────────────────────
   useEffect(() => {
     if (!pages.length) { setPageStates([]); return; }
+    let cancelled = false;
     async function compute() {
       const states: PageState[] = [];
       const newPdfPages = new Map<string, pdfjsLib.PDFPageProxy>();
       for (const page of pages) {
+        if (cancelled) return;
         let w: number, h: number;
         if (page.source === 'original' && pdfDoc && page.originalIndex !== undefined) {
           const pdfPage = await pdfDoc.getPage(page.originalIndex + 1);
+          if (cancelled) return;
           const vp = pdfPage.getViewport({ scale, rotation: page.rotation });
           w = vp.width; h = vp.height;
           newPdfPages.set(page.id, pdfPage);
@@ -188,10 +199,13 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
         }
         states.push({ pageId: page.id, canvasWidth: Math.round(w), canvasHeight: Math.round(h) });
       }
-      setPageStates(states);
-      setPdfPages(newPdfPages);
+      if (!cancelled) {
+        setPageStates(states);
+        setPdfPages(newPdfPages);
+      }
     }
     compute();
+    return () => { cancelled = true; };
   }, [pages, scale, pdfDoc]);
 
   // ── Render pages onto canvas ────────────────────────────────────────────────

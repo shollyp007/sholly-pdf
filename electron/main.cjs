@@ -10,6 +10,8 @@ autoUpdater.logger = null                 // suppress noisy console logs
 
 // Track whether the check was user-initiated (via Help menu) or silent (background)
 let userInitiatedCheck = false
+// Track whether a download is in progress so errors are always surfaced to the UI
+let downloadInProgress = false
 
 autoUpdater.on('update-available', (info) => {
   mainWindow?.webContents.send('updater:available', info)
@@ -21,14 +23,18 @@ autoUpdater.on('update-not-available', () => {
   userInitiatedCheck = false
 })
 autoUpdater.on('error', (err) => {
-  // Only surface errors to the user if they initiated the check themselves
-  if (userInitiatedCheck) mainWindow?.webContents.send('updater:error', err.message)
+  // Always surface errors when downloading; only surface check errors if user-initiated
+  if (userInitiatedCheck || downloadInProgress) {
+    mainWindow?.webContents.send('updater:error', err.message)
+  }
   userInitiatedCheck = false
+  downloadInProgress = false
 })
 autoUpdater.on('download-progress', (p) => {
   mainWindow?.webContents.send('updater:progress', Math.round(p.percent))
 })
 autoUpdater.on('update-downloaded', (info) => {
+  downloadInProgress = false
   mainWindow?.webContents.send('updater:downloaded', info)
 })
 
@@ -179,6 +185,7 @@ ipcMain.handle('updater:check', async () => {
   }
 })
 ipcMain.handle('updater:download', async () => {
+  downloadInProgress = true
   await autoUpdater.downloadUpdate()
 })
 ipcMain.handle('updater:install', () => {

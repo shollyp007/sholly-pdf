@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorStore, newPageId } from './store/editorStore';
+import { pdfDocCache } from './lib/pdfCache';
 import ToolRibbon from './components/ToolRibbon';
 import PDFViewer, { type PDFViewerHandle } from './components/PDFViewer';
 import Sidebar from './components/Sidebar';
@@ -513,6 +514,7 @@ export default function App() {
     const pdfjsLib = await import('pdfjs-dist');
     const bytes = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+    pdfDocCache.set(file, pdf); // cache so PDFViewer doesn't re-parse
     const docPages: DocPage[] = [];
     for (let i = 0; i < pdf.numPages; i++) {
       const p = await pdf.getPage(i + 1);

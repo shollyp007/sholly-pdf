@@ -1,6 +1,14 @@
 import { PDFDocument, rgb, StandardFonts, LineCapStyle, PDFTextField, PDFCheckBox, PDFDropdown } from 'pdf-lib';
 import type { Annotation, DocPage } from '../types';
 
+function blendWithWhite(color: ReturnType<typeof rgb>, alpha: number) {
+  return rgb(
+    color.red * alpha + (1 - alpha),
+    color.green * alpha + (1 - alpha),
+    color.blue * alpha + (1 - alpha),
+  );
+}
+
 function hexToRgb(hex: string) {
   // Handle rgba(...) format
   const rgbaMatch = hex.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
@@ -127,8 +135,7 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
             y: pdfH - (ann.y + ann.height) * scaleY,
             width: ann.width * scaleX,
             height: ann.height * scaleY,
-            color: hexToRgb(ann.color),
-            opacity: ann.opacity,
+            color: blendWithWhite(hexToRgb(ann.color), ann.opacity),
           });
         } else if (ann.type === 'rectangle') {
           page.drawRectangle({
@@ -138,8 +145,7 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
             height: ann.height * scaleY,
             borderColor: hexToRgb(ann.strokeColor),
             borderWidth: ann.strokeWidth,
-            color: ann.filled ? hexToRgb(ann.fillColor) : undefined,
-            opacity: ann.filled ? 0.3 : 1,
+            color: ann.filled ? blendWithWhite(hexToRgb(ann.fillColor), 0.3) : undefined,
           });
         } else if (ann.type === 'ellipse') {
           page.drawEllipse({
@@ -149,8 +155,7 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
             yScale: ann.ry * scaleY,
             borderColor: hexToRgb(ann.strokeColor),
             borderWidth: ann.strokeWidth,
-            color: ann.filled ? hexToRgb(ann.fillColor) : undefined,
-            opacity: ann.filled ? 0.3 : 1,
+            color: ann.filled ? blendWithWhite(hexToRgb(ann.fillColor), 0.3) : undefined,
           });
         } else if (ann.type === 'line') {
           page.drawLine({
