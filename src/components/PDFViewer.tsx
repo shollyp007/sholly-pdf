@@ -11,12 +11,12 @@ export interface CanvasInfo { width: number; height: number; dataUrl?: string; }
 export interface PDFViewerHandle { getCanvasInfos: () => CanvasInfo[]; }
 
 interface PageState { pageId: string; canvasWidth: number; canvasHeight: number; }
-interface TextItem { str: string; x: number; y: number; w: number; h: number; fontSize: number; fontFamily: string; }
+interface TextItem { str: string; x: number; y: number; w: number; h: number; fontSize: number; fontFamily: string; bold: boolean; italic: boolean; }
 
 // ── Text layer for a single page ─────────────────────────────────────────────
-function TextLayer({ pageId, pdfPage, scale, width, height }: {
+function TextLayer({ pageId, pdfPage, scale, rotation, width, height }: {
   pageId: string; pdfPage: pdfjsLib.PDFPageProxy | null;
-  scale: number; width: number; height: number;
+  scale: number; rotation: number; width: number; height: number;
 }) {
   const [items, setItems] = useState<TextItem[]>([]);
   const { activeTool, highlightColor, strokeColor, highlightOpacity, addAnnotation, setPendingEditTextId } = useEditorStore();
@@ -24,7 +24,7 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
   useEffect(() => {
     if (!pdfPage) { setItems([]); return; }
     pdfPage.getTextContent().then((content) => {
-      const vp = pdfPage.getViewport({ scale });
+      const vp = pdfPage.getViewport({ scale, rotation: rotation as 0|90|180|270 });
       const list: TextItem[] = [];
       for (const item of content.items) {
         if (!('str' in item) || !item.str.trim()) continue;
@@ -33,10 +33,15 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
         const h = Math.abs(tx[3]) || 12;
         const y = tx[5] - h;
         const w = (item as any).width * scale;
-        // Detect the CSS font family that PDF.js maps this font to
-        const fontStyle = (content.styles as any)?.[(item as any).fontName] as { fontFamily?: string } | undefined;
+        // Detect the CSS font family that PDF.js maps this font to, and infer bold/italic
+        const fontNameKey = (item as any).fontName as string || '';
+        const fontStyle = (content.styles as any)?.[fontNameKey] as { fontFamily?: string; fontSubstitution?: string } | undefined;
         const fontFamily = fontStyle?.fontFamily || 'sans-serif';
-        list.push({ str: item.str, x, y, w, h, fontSize: h * 0.85, fontFamily });
+        // Check font name and mapped family for bold/italic descriptors
+        const boldSrc = fontNameKey + ' ' + (fontStyle?.fontFamily ?? '') + ' ' + (fontStyle?.fontSubstitution ?? '');
+        const isBold = /bold/i.test(boldSrc);
+        const isItalic = /italic|oblique/i.test(boldSrc);
+        list.push({ str: item.str, x, y, w, h, fontSize: h * 0.85, fontFamily, bold: isBold, italic: isItalic });
       }
       setItems(list);
     }).catch(() => setItems([]));
@@ -107,13 +112,37 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
       fontFamily,
       fontStack: fontFamily,
       detectedFontFamily: fontFamily,
-      bold: false, italic: false, underline: false,
+      bold: clickedItem.bold, italic: clickedItem.italic, underline: false,
       align: 'left',
     } as any);
 
     // Store click coordinates so the editor can place cursor at the exact click position
     useEditorStore.getState().setPendingEditClickPos({ x: e.clientX, y: e.clientY });
     // Signal AnnotationLayer to enter edit mode, then switch back to select tool
+    setPendingEditTextId(textId);
+    useEditorStore.getState().setActiveTool('select');
+  }
+
+  // Fallback: clicking on empty space in edit-text mode creates a blank text box.
+  // Span clicks call stopPropagation so this only fires when no text span was hit.
+  function onLayerClick(e: React.MouseEvent) {
+    if (!isEditText) return;
+    const layerEl = document.getElementById(`text-layer-${pageId}`);
+    if (!layerEl) return;
+    const base = layerEl.getBoundingClientRect();
+    const x = e.clientX - base.left;
+    const y = e.clientY - base.top;
+    const textId = generateId();
+    addAnnotation({
+      id: textId, type: 'text', pageId,
+      x, y, width: 200, height: 16,
+      content: '',
+      fontSize: 14, color: '#000000',
+      fontFamily: 'sans-serif', fontStack: 'sans-serif',
+      bold: false, italic: false, underline: false,
+      align: 'left',
+    } as any);
+    useEditorStore.getState().setPendingEditClickPos({ x: e.clientX, y: e.clientY });
     setPendingEditTextId(textId);
     useEditorStore.getState().setActiveTool('select');
   }
@@ -125,6 +154,7 @@ function TextLayer({ pageId, pdfPage, scale, width, height }: {
     <div
       id={`text-layer-${pageId}`}
       onMouseUp={onTextMouseUp}
+      onClick={onLayerClick}
       style={{
         position: 'absolute', top: 0, left: 0, width, height,
         userSelect: isMarkupOrSelect ? 'text' : 'none',
@@ -317,6 +347,7 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
                   pageId={ps.pageId}
                   pdfPage={pdfPage}
                   scale={scale}
+                  rotation={page.rotation}
                   width={ps.canvasWidth}
                   height={ps.canvasHeight}
                 />

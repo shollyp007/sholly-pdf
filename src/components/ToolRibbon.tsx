@@ -22,7 +22,7 @@ const STROKE_COLORS = ['#000000', '#ffffff', '#1e3a5f', '#e11d48', '#f97316', '#
 // ─── Shared dropdown panel style ──────────────────────────────────────────────
 const COLOR_PANEL_STYLE: React.CSSProperties = {
   position: 'absolute', top: 'calc(100% + 6px)', left: 0,
-  background: '#161a27',
+  background: 'var(--panel2)',
   border: '1px solid rgba(255,255,255,0.12)',
   borderRadius: 10, padding: '10px',
   boxShadow: '0 16px 48px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)',
@@ -87,7 +87,7 @@ function ColorPickerDropdown({
             onClick={() => { onChange(c); setOpen(false); }}
             style={{
               width: 20, height: 20, borderRadius: 5, background: c, cursor: 'pointer',
-              border: value === c ? '2px solid #7eb3ff' : '1px solid rgba(255,255,255,0.18)',
+              border: value === c ? '2px solid var(--accent-hover)' : '1px solid rgba(255,255,255,0.18)',
               boxSizing: 'border-box', transition: 'transform 0.1s',
             }}
             onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.transform = 'scale(1.25)'}

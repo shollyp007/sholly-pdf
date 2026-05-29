@@ -133,7 +133,8 @@ export interface DocPage {
   originalIndex?: number;
   pdfWidth: number;
   pdfHeight: number;
-  rotation: 0 | 90 | 180 | 270;
+  rotation: 0 | 90 | 180 | 270;        // user-applied rotation delta (starts at 0)
+  inherentRotation?: 0 | 90 | 180 | 270; // PDF's own /Rotate value, never mutated
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────

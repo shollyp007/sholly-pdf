@@ -20,13 +20,13 @@ function Logo() {
       <div style={{
         width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'linear-gradient(145deg, #3b6fd4 0%, #7c3aed 100%)',
-        boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 3px 12px rgba(79,123,255,0.4)',
+        boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 3px 12px rgba(10,132,255,0.4)',
         flexShrink: 0,
       }}>
         <span style={{ fontSize: 17, color: 'white', fontWeight: 900, letterSpacing: -0.5 }}>S</span>
       </div>
       <div style={{ lineHeight: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: '#eef0f8', letterSpacing: -0.4 }}>Sholly</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-bright)', letterSpacing: -0.4 }}>Sholly</div>
         <div style={{ fontSize: 8.5, background: 'linear-gradient(90deg,#4f7bff,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: 2.5, fontWeight: 700 }}>PDF</div>
       </div>
     </div>
@@ -83,7 +83,7 @@ function MenuPortal({ open, btnRef, panelRef, children }: {
   return createPortal(
     <div ref={panelRef} style={{
       position: 'fixed', top: pos.top, left: pos.left, width: 234,
-      background: '#12151f',
+      background: 'var(--panel)',
       border: '1px solid rgba(255,255,255,0.14)',
       borderRadius: 12,
       boxShadow: '0 24px 64px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.03)',
@@ -337,12 +337,12 @@ function IconBtn({ onClick, disabled, title, children, active }: { onClick: () =
       style={{
         width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: active ? 'var(--accent-light)' : 'transparent',
-        border: '1px solid ' + (active ? 'rgba(79,123,255,0.3)' : 'transparent'),
-        borderRadius: 6, color: disabled ? 'var(--border)' : (active ? '#7eb3ff' : 'var(--text-dim)'),
+        border: '1px solid ' + (active ? 'rgba(10,132,255,0.3)' : 'transparent'),
+        borderRadius: 6, color: disabled ? 'var(--border)' : (active ? 'var(--accent-hover)' : 'var(--text-dim)'),
         cursor: disabled ? 'default' : 'pointer', fontSize: 16, transition: 'all 0.12s',
       }}
       onMouseEnter={(e) => { if (!disabled) { (e.currentTarget).style.background = 'var(--panel2)'; (e.currentTarget).style.color = 'var(--text-bright)'; } }}
-      onMouseLeave={(e) => { (e.currentTarget).style.background = active ? 'var(--accent-light)' : 'transparent'; (e.currentTarget).style.color = disabled ? 'var(--border)' : (active ? '#7eb3ff' : 'var(--text-dim)'); }}>
+      onMouseLeave={(e) => { (e.currentTarget).style.background = active ? 'var(--accent-light)' : 'transparent'; (e.currentTarget).style.color = disabled ? 'var(--border)' : (active ? 'var(--accent-hover)' : 'var(--text-dim)'); }}>
       {children}
     </button>
   );
@@ -422,8 +422,8 @@ function DocTabBar({ onOpen }: { onOpen: () => void }) {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '0 6px 0 10px', height: 28, borderRadius: 6, flexShrink: 0,
-              background: isActive ? 'rgba(79,123,255,0.12)' : 'transparent',
-              border: '1px solid ' + (isActive ? 'rgba(79,123,255,0.35)' : 'transparent'),
+              background: isActive ? 'rgba(10,132,255,0.12)' : 'transparent',
+              border: '1px solid ' + (isActive ? 'rgba(10,132,255,0.35)' : 'transparent'),
               cursor: isEditing ? 'default' : 'pointer', transition: 'all 0.12s', maxWidth: 220,
             }}
             onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'; }}
@@ -444,12 +444,12 @@ function DocTabBar({ onOpen }: { onOpen: () => void }) {
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   width: 130, fontSize: 11, background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(79,123,255,0.5)', borderRadius: 4,
+                  border: '1px solid rgba(10,132,255,0.5)', borderRadius: 4,
                   color: 'var(--text-bright)', padding: '1px 5px', outline: 'none',
                 }}
               />
             ) : (
-              <span style={{ fontSize: 11, color: isActive ? '#93c5fd' : 'var(--text-dim)', whiteSpace: 'nowrap', userSelect: 'none' }}
+              <span style={{ fontSize: 11, color: isActive ? 'var(--accent-hover)' : 'var(--text-dim)', whiteSpace: 'nowrap', userSelect: 'none' }}
                 title="Double-click to rename">
                 {tab.pdfFile ? '📄 ' : '✦ '}{displayName}
                 {tab.isDirty && <span style={{ color: '#f59e0b', marginLeft: 3 }}>●</span>}
@@ -518,8 +518,11 @@ export default function App() {
     const docPages: DocPage[] = [];
     for (let i = 0; i < pdf.numPages; i++) {
       const p = await pdf.getPage(i + 1);
+      // Read the page's inherent /Rotate value and store it as the starting rotation.
+      // getViewport without explicit rotation uses p.rotate automatically for dimensions.
+      const rotation = p.rotate as 0 | 90 | 180 | 270;
       const vp = p.getViewport({ scale: 1 });
-      docPages.push({ id: newPageId(), source: 'original', originalIndex: i, pdfWidth: vp.width, pdfHeight: vp.height, rotation: 0 });
+      docPages.push({ id: newPageId(), source: 'original', originalIndex: i, pdfWidth: vp.width, pdfHeight: vp.height, rotation });
     }
     openPdf(file, bytes, docPages);
   }, [openPdf]);
@@ -556,7 +559,7 @@ export default function App() {
     function onKey(e: KeyboardEvent) {
       const m = e.ctrlKey || e.metaKey;
       const target = e.target as HTMLElement;
-      const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+      const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable;
 
       // File / history shortcuts (always active)
       if (m && e.key === 'z') { e.preventDefault(); undo(); }
@@ -819,11 +822,11 @@ export default function App() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-panel, #1e2030)', border: '1px solid var(--border, #334)',
+            background: 'var(--panel)', border: '1px solid var(--border-light)',
             borderRadius: 12, padding: '28px 32px', width: 360, boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
           }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#eef0f8', marginBottom: 10 }}>Unsaved Changes</div>
-            <div style={{ fontSize: 13.5, color: '#94a3b8', lineHeight: 1.6, marginBottom: 22 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 10 }}>Unsaved Changes</div>
+            <div style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 22 }}>
               You have unsaved changes. If you close now, your edits will be lost.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -872,7 +875,7 @@ function Landing({ onNew, onOpen, onDrop }: { onNew: () => void; onOpen: () => v
 
       {/* Ambient glow blobs */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-        <div style={{ position: 'absolute', top: '15%', left: '25%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(79,123,255,0.07) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+        <div style={{ position: 'absolute', top: '15%', left: '25%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(10,132,255,0.07) 0%, transparent 70%)', filter: 'blur(40px)' }} />
         <div style={{ position: 'absolute', bottom: '20%', right: '20%', width: 350, height: 350, borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,85,247,0.06) 0%, transparent 70%)', filter: 'blur(40px)' }} />
       </div>
 
@@ -881,20 +884,20 @@ function Landing({ onNew, onOpen, onDrop }: { onNew: () => void; onOpen: () => v
         <div style={{
           width: 72, height: 72, borderRadius: 20, margin: '0 auto 20px',
           background: 'linear-gradient(145deg, #3b6fd4 0%, #7c3aed 100%)',
-          boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 8px 32px rgba(79,123,255,0.45)',
+          boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 8px 32px rgba(10,132,255,0.45)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <span style={{ fontSize: 36, color: 'white', fontWeight: 900 }}>S</span>
         </div>
-        <h1 style={{ fontSize: 34, fontWeight: 800, color: '#eef0f8', margin: '0 0 10px', letterSpacing: -0.8, lineHeight: 1 }}>Sholly PDF</h1>
+        <h1 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-bright)', margin: '0 0 10px', letterSpacing: -0.8, lineHeight: 1 }}>Sholly PDF</h1>
         <p style={{ color: 'var(--text-dim)', fontSize: 14.5, margin: 0, letterSpacing: 0.1 }}>Professional PDF creation and annotation</p>
       </div>
 
       {/* Action cards */}
       <div style={{ display: 'flex', gap: 14, zIndex: 1 }}>
         {[
-          { icon: '✦', title: 'New Document', sub: 'Start from a blank page', fn: onNew, shortcut: '⌘N', grad: 'linear-gradient(145deg,#1e2a4a,#1a2038)' },
-          { icon: '⬆', title: 'Open PDF',     sub: 'Edit an existing PDF file', fn: onOpen, shortcut: '⌘O', grad: 'linear-gradient(145deg,#1e2a3a,#18202e)' },
+          { icon: '✦', title: 'New Document', sub: 'Start from a blank page', fn: onNew, shortcut: '⌘N', grad: 'var(--panel2)' },
+          { icon: '⬆', title: 'Open PDF',     sub: 'Edit an existing PDF file', fn: onOpen, shortcut: '⌘O', grad: 'var(--panel2)' },
         ].map((c) => (
           <button key={c.title} onClick={c.fn}
             style={{
@@ -904,16 +907,16 @@ function Landing({ onNew, onOpen, onDrop }: { onNew: () => void; onOpen: () => v
               boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget).style.borderColor = 'rgba(79,123,255,0.55)';
+              (e.currentTarget).style.borderColor = 'rgba(10,132,255,0.55)';
               (e.currentTarget).style.transform = 'translateY(-3px)';
-              (e.currentTarget).style.boxShadow = '0 12px 36px rgba(0,0,0,0.4), 0 0 20px rgba(79,123,255,0.12)';
+              (e.currentTarget).style.boxShadow = '0 12px 36px rgba(0,0,0,0.4), 0 0 20px rgba(10,132,255,0.12)';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget).style.borderColor = 'var(--border-glow)';
               (e.currentTarget).style.transform = 'none';
               (e.currentTarget).style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
             }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent-light)', border: '1px solid rgba(79,123,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#7eb3ff' }}>{c.icon}</div>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent-light)', border: '1px solid rgba(10,132,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: 'var(--accent-hover)' }}>{c.icon}</div>
             <div>
               <div style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 14 }}>{c.title}</div>
               <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 5 }}>{c.sub}</div>

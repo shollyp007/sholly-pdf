@@ -138,9 +138,9 @@ export default function Sidebar() {
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                     cursor: 'pointer', padding: '6px', borderRadius: 8,
-                    border: isDragOver ? '2px dashed rgba(79,123,255,0.6)' : '2px solid transparent',
-                    background: isActive ? 'rgba(79,123,255,0.12)' : 'transparent',
-                    outline: isActive ? '1px solid rgba(79,123,255,0.35)' : 'none',
+                    border: isDragOver ? '2px dashed rgba(10,132,255,0.6)' : '2px solid transparent',
+                    background: isActive ? 'rgba(10,132,255,0.12)' : 'transparent',
+                    outline: isActive ? '1px solid rgba(10,132,255,0.35)' : 'none',
                     transition: 'background 0.12s',
                   }}
                 >
@@ -148,8 +148,8 @@ export default function Sidebar() {
                   <div style={{
                     width: thumbW, height: thumbH,
                     background: 'white', borderRadius: 3, overflow: 'hidden',
-                    border: isActive ? '1.5px solid rgba(79,123,255,0.7)' : '1px solid rgba(255,255,255,0.12)',
-                    boxShadow: isActive ? '0 0 0 2px rgba(79,123,255,0.2)' : '0 2px 6px rgba(0,0,0,0.3)',
+                    border: isActive ? '1.5px solid rgba(10,132,255,0.7)' : '1px solid rgba(255,255,255,0.12)',
+                    boxShadow: isActive ? '0 0 0 2px rgba(10,132,255,0.2)' : '0 2px 6px rgba(0,0,0,0.3)',
                     position: 'relative', flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
@@ -158,7 +158,7 @@ export default function Sidebar() {
                       : <div style={{ width: '100%', height: '100%', background: 'white' }} />
                     }
                     {page.rotation !== 0 && (
-                      <div style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(79,123,255,0.85)', color: '#fff', fontSize: 8, borderRadius: 3, padding: '1px 4px' }}>
+                      <div style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(10,132,255,0.85)', color: '#fff', fontSize: 8, borderRadius: 3, padding: '1px 4px' }}>
                         {page.rotation}°
                       </div>
                     )}
@@ -180,7 +180,7 @@ export default function Sidebar() {
                   </div>
 
                   {/* Page number */}
-                  <span style={{ fontSize: 10.5, color: isActive ? '#7eb3ff' : 'var(--text-dim)', fontWeight: isActive ? 600 : 400 }}>
+                  <span style={{ fontSize: 10.5, color: isActive ? '#409cff' : 'var(--text-dim)', fontWeight: isActive ? 600 : 400 }}>
                     {idx + 1}
                   </span>
                 </div>
@@ -197,7 +197,7 @@ export default function Sidebar() {
                 borderRadius: 7, background: 'transparent', color: 'var(--text-dim)',
                 cursor: 'pointer', fontSize: 12, transition: 'all 0.12s',
               }}
-              onMouseEnter={(e) => { (e.currentTarget).style.color = 'var(--text-bright)'; (e.currentTarget).style.borderColor = 'rgba(79,123,255,0.4)'; (e.currentTarget).style.background = 'rgba(79,123,255,0.05)'; }}
+              onMouseEnter={(e) => { (e.currentTarget).style.color = 'var(--text-bright)'; (e.currentTarget).style.borderColor = 'rgba(10,132,255,0.4)'; (e.currentTarget).style.background = 'rgba(10,132,255,0.05)'; }}
               onMouseLeave={(e) => { (e.currentTarget).style.color = 'var(--text-dim)'; (e.currentTarget).style.borderColor = 'rgba(255,255,255,0.12)'; (e.currentTarget).style.background = 'transparent'; }}
             >
               + Add Page
@@ -241,7 +241,7 @@ export default function Sidebar() {
                     fontSize: 11, cursor: 'pointer', border: '1px solid var(--border)',
                     transition: 'border-color 0.12s',
                   }}
-                  onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'rgba(79,123,255,0.4)'}
+                  onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'rgba(10,132,255,0.4)'}
                   onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>

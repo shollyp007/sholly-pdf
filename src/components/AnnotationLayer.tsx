@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useLayoutEffect, useCallback, useState } from 'react';
 import { useEditorStore, generateId } from '../store/editorStore';
+import SignatureModal from './SignatureModal';
 import type {
   Annotation, DrawAnnotation, TextAnnotation, EllipseAnnotation,
   LineAnnotation, ArrowAnnotation, Point,
@@ -46,8 +47,8 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
   const [openSticky, setOpenSticky] = useState<string | null>(null);
   const [, forceUpdate] = useState(0); // used to trigger re-render for preview rect
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; annId: string } | null>(null);
-  // Which text annotation is currently in "edit" mode (textarea accepting input)
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [signatureModalPos, setSignatureModalPos] = useState<Point | null>(null);
 
   const pageAnnots = annotations.filter((a) => a.pageId === pageId);
 
@@ -365,6 +366,18 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool, pageId, strokeColor, fillColor, highlightColor, strokeWidth, filled, cornerRadius, highlightOpacity, drawOpacity]);
 
+  // ── Double-click to enter text edit mode ────────────────────────────────────
+  const onDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeTool !== 'select') return;
+    const pos = getPosFromEvent(e.nativeEvent);
+    const hit = findAt(pos);
+    if (hit?.type === 'text') {
+      setSelectedIds([hit.id]);
+      setEditingTextId(hit.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTool, pageAnnots]);
+
   // ── Right-click context menu ─────────────────────────────────────────────────
   const onContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -455,7 +468,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
 
     // ── One-click tools ──────────────────────────────────────────────────────
     if (activeTool === 'image')     { insertImage(pos); return; }
-    if (activeTool === 'signature') { insertImage(pos, true); return; }
+    if (activeTool === 'signature') { setSignatureModalPos(pos); return; }
 
     if (activeTool === 'sticky') {
       addAnnotation({ id: generateId(), type: 'sticky', pageId, x: pos.x, y: pos.y, content: '', color: '#fef08a', collapsed: false, author: authorName });
@@ -521,7 +534,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
       <>
         {handles.map(([h, hx, hy, cur]) => (
           <rect key={h} x={hx - 5} y={hy - 5} width={10} height={10}
-            fill="#fff" stroke="#4f7bff" strokeWidth={1.5} rx={2}
+            fill="#fff" stroke="#0a84ff" strokeWidth={1.5} rx={2}
             style={{ cursor: cur, pointerEvents: 'all' }}
             onMouseDown={(e) => {
               e.stopPropagation();
@@ -547,6 +560,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
         cursor, userSelect: 'none',
       }}
       onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
       {/* ── Finalized annotations SVG ── */}
@@ -554,7 +568,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
         style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible', pointerEvents: 'none' }}>
         {pageAnnots.map((ann) => {
           const sel = selectedIds.includes(ann.id);
-          const glow = sel ? { filter: 'drop-shadow(0 0 3px rgba(79,123,255,0.6))' } : {};
+          const glow = sel ? { filter: 'drop-shadow(0 0 3px rgba(10,132,255,0.6))' } : {};
 
           if (ann.type === 'highlight') return (
             <rect key={ann.id} x={ann.x} y={ann.y} width={ann.width} height={ann.height}
@@ -590,18 +604,18 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
           if (ann.type === 'image') return (
             <g key={ann.id} style={glow as any}>
               <image href={ann.dataUrl} x={ann.x} y={ann.y} width={ann.width} height={ann.height} opacity={(ann as any).opacity ?? 1} style={{ pointerEvents: 'all' }} />
-              {sel && <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill="none" stroke="#4f7bff" strokeWidth={1.5} strokeDasharray="5 3" />}
+              {sel && <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill="none" stroke="#0a84ff" strokeWidth={1.5} strokeDasharray="5 3" />}
             </g>
           );
           if (ann.type === 'signature') return (
             <g key={ann.id} style={glow as any}>
               <image href={ann.dataUrl} x={ann.x} y={ann.y} width={ann.width} height={ann.height} style={{ pointerEvents: 'all' }} />
-              {sel && <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill="none" stroke="#4f7bff" strokeWidth={1.5} strokeDasharray="5 3" />}
+              {sel && <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill="none" stroke="#0a84ff" strokeWidth={1.5} strokeDasharray="5 3" />}
             </g>
           );
           if (ann.type === 'redact') return (
             <rect key={ann.id} x={ann.x} y={ann.y} width={ann.width} height={ann.height}
-              fill="#0a0a0a" stroke={sel ? '#4f7bff' : 'none'} strokeWidth={1.5}
+              fill="#0a0a0a" stroke={sel ? '#0a84ff' : 'none'} strokeWidth={1.5}
               style={{ pointerEvents: 'all' }} />
           );
           if (ann.type === 'cover') return (
@@ -660,7 +674,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
                 <rect
                   x={b.x - 4} y={b.y - 4} width={b.w + 8} height={b.h + 8}
                   fill="transparent"
-                  stroke={isEditing ? '#60a5fa' : '#4f7bff'}
+                  stroke={isEditing ? 'var(--accent)' : '#0a84ff'}
                   strokeWidth={isEditing ? 2 : 1.5}
                   strokeDasharray={isEditing ? '0' : '5 3'}
                   rx={2}
@@ -674,7 +688,7 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
           return (
             <g key={`sel-${id}`}>
               <rect x={b.x - 4} y={b.y - 4} width={b.w + 8} height={b.h + 8}
-                fill="none" stroke="#4f7bff" strokeWidth={1.5} strokeDasharray="5 3" rx={2}
+                fill="none" stroke="#0a84ff" strokeWidth={1.5} strokeDasharray="5 3" rx={2}
                 style={{ pointerEvents: 'none' }} />
               {activeTool === 'select' && <ResizeHandles ann={ann} />}
             </g>
@@ -730,6 +744,30 @@ export default function AnnotationLayer({ pageId, width, height }: Props) {
             ✕ Delete
           </button>
         </div>
+      )}
+
+      {/* ── Signature modal ── */}
+      {signatureModalPos && (
+        <SignatureModal
+          onInsert={(dataUrl) => {
+            const pos = signatureModalPos;
+            setSignatureModalPos(null);
+            const img = new Image();
+            img.onload = () => {
+              const maxW = Math.min(280, width * 0.5);
+              const ratio = img.height / img.width;
+              const w = Math.min(maxW, img.width);
+              const h = w * ratio;
+              addAnnotation({
+                id: generateId(), type: 'signature', pageId,
+                x: Math.max(0, pos.x - w / 2), y: Math.max(0, pos.y - h / 2),
+                width: w, height: h, dataUrl,
+              } as any);
+            };
+            img.src = dataUrl;
+          }}
+          onClose={() => setSignatureModalPos(null)}
+        />
       )}
 
       {/* ── Context menu ── */}
@@ -814,8 +852,10 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
   const divRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const autoPagedRef = useRef(false);
-  // True once the user has actually typed something in this edit session
+  const hasTypedRef = useRef(false);
   const coverCreatedRef = useRef(!!(ann as any).coverAnnId);
+  // textVisible: false = transparent (for native PDF edits before first keystroke)
+  const [textVisible, setTextVisible] = useState(true);
   const { addBlankPage } = useEditorStore();
 
   // On entering edit mode: set content once, place cursor at click position.
@@ -826,11 +866,23 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
     if (editing && !initializedRef.current) {
       initializedRef.current = true;
       autoPagedRef.current = false;
+      hasTypedRef.current = false;
       coverCreatedRef.current = !!(ann as any).coverAnnId;
       el.innerText = ann.content;
+
+      // For native PDF text edits: keep text invisible until first keystroke so
+      // the original PDF canvas text remains visible (no visual change on click).
+      // Cover rect is also created lazily on first keystroke only.
+      const isNativeEdit = (ann as any).originalContent !== undefined;
+      if (isNativeEdit && !coverCreatedRef.current) {
+        setTextVisible(false);
+      } else {
+        setTextVisible(true);
+      }
+
       el.focus();
 
-      // Read and clear the pending click position from the store (direct access avoids re-render)
+      // Place cursor at click position or end
       const store = useEditorStore.getState();
       const clickPos = store.pendingEditClickPos;
       if (clickPos) {
@@ -871,18 +923,23 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
     const content = divRef.current.innerText;
     onUpdate({ content });
 
-    // Lazily create the cover rect on the FIRST keystroke so clicking text shows no box.
-    if (!coverCreatedRef.current) {
-      coverCreatedRef.current = true;
-      const store = useEditorStore.getState();
-      const coverId = generateId();
-      store.addAnnotation({
-        id: coverId, type: 'cover', pageId,
-        x: ann.x - 2, y: ann.y - 2,
-        width: (ann.width ?? 200) + 4,
-        height: (ann.height ?? ann.fontSize * 1.6) + 4,
-      });
-      store.updateAnnotation(ann.id, { coverAnnId: coverId } as any);
+    // On first keystroke: reveal text and lazily create the cover rect to hide
+    // the underlying PDF canvas text (now that the overlay has different content).
+    if (!hasTypedRef.current) {
+      hasTypedRef.current = true;
+      setTextVisible(true);
+      if (!coverCreatedRef.current) {
+        coverCreatedRef.current = true;
+        const store = useEditorStore.getState();
+        const coverId = generateId();
+        store.addAnnotation({
+          id: coverId, type: 'cover', pageId,
+          x: ann.x - 2, y: ann.y - 2,
+          width: (ann.width ?? 200) + 4,
+          height: (ann.height ?? ann.fontSize * 1.6) + 4,
+        });
+        store.updateAnnotation(ann.id, { coverAnnId: coverId } as any);
+      }
     }
   }
 
@@ -898,8 +955,8 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
   function handleBlur() {
     const content = divRef.current?.innerText ?? '';
     const original = (ann as any).originalContent as string | undefined;
-    // Delete the annotation if: empty, OR original text-in-place edit with no changes made
-    if (!content.trim() || (!coverCreatedRef.current && original !== undefined && content === original)) {
+    // Delete if empty, or if the user clicked a native PDF text line but made no changes
+    if (!content.trim() || (original !== undefined && content === original)) {
       onBlurEmpty();
     }
   }
@@ -917,8 +974,8 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
           style={{
             position: 'absolute', top: -(RESERVE - 4), left: 0,
             display: 'flex', gap: 3, zIndex: 30,
-            background: 'linear-gradient(160deg,#1c2235,#161d2e)', borderRadius: 8, padding: '4px 6px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(79,123,255,0.2)',
+            background: 'var(--panel2)', borderRadius: 8, padding: '4px 6px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(10,132,255,0.2)',
             whiteSpace: 'nowrap',
           }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -930,8 +987,8 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
           ].map(({ label, style, active, fn }) => (
             <button key={label}
               onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); fn(); }}
-              style={{ ...style, fontSize: 12, color: active ? '#7eb3ff' : '#94a3b8', border: 'none', cursor: 'pointer', padding: '1px 5px', borderRadius: 4,
-                background: active ? 'rgba(79,123,255,0.15)' : 'none' } as React.CSSProperties}>{label}</button>
+              style={{ ...style, fontSize: 12, color: active ? 'var(--accent-hover)' : 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: '1px 5px', borderRadius: 4,
+                background: active ? 'rgba(10,132,255,0.15)' : 'none' } as React.CSSProperties}>{label}</button>
           ))}
           <div style={{ width: 1, background: '#2a3244', margin: '0 2px' }} />
           <button
@@ -949,7 +1006,7 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
         style={{
           display: 'block',
           fontSize: ann.fontSize,
-          color: ann.color,
+          color: textVisible ? ann.color : 'transparent',
           fontFamily: fontToUse,
           fontWeight: ann.bold ? 'bold' : 'normal',
           fontStyle: ann.italic ? 'italic' : 'normal',
@@ -957,7 +1014,7 @@ function InlineEditor({ ann, selected, editing, onDelete, onUpdate, onSelect, on
           textAlign: ann.align || 'left',
           // Zero visible border — the blinking cursor is the only edit indicator
           outline: 'none',
-          border: selected && !editing ? '1px dashed rgba(79,123,255,0.25)' : '1px solid transparent',
+          border: selected && !editing ? '1px dashed rgba(10,132,255,0.25)' : '1px solid transparent',
           background: 'transparent',
           caretColor: '#2563eb',
           borderRadius: 2,
@@ -1022,9 +1079,9 @@ function ContextMenu({ x, y, pageW, pageH, hasClipboard, onClose, onAction }: {
       onContextMenu={(e) => e.preventDefault()}
       style={{
         position: 'absolute', left, top, zIndex: 100, width: menuW,
-        background: 'linear-gradient(160deg,#1c2235,#161d2e)',
-        border: '1px solid rgba(79,123,255,0.25)',
-        borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(79,123,255,0.1)',
+        background: 'var(--panel)',
+        border: '1px solid rgba(10,132,255,0.25)',
+        borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(10,132,255,0.1)',
         padding: '4px 0', pointerEvents: 'all',
       }}
     >
@@ -1043,7 +1100,7 @@ function ContextMenu({ x, y, pageW, pageH, hasClipboard, onClose, onAction }: {
               color: disabled ? 'rgba(255,255,255,0.2)' : danger ? '#f87171' : 'var(--text-bright, #e2e8f0)',
               transition: 'background 0.1s',
             }}
-            onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = danger ? 'rgba(239,68,68,0.1)' : 'rgba(79,123,255,0.12)'; }}
+            onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = danger ? 'rgba(239,68,68,0.1)' : 'rgba(10,132,255,0.12)'; }}
             onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = 'transparent'}
           >
             <span style={{ width: 18, textAlign: 'center', fontSize: 11, opacity: disabled ? 0.3 : 0.8 }}>{icon}</span>
