@@ -69,6 +69,9 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
+      "identity": "Developer ID Application",
+      "notarize": false,
+      "afterSign": "electron/notarize.cjs",
       "extendInfo": {
         "NSDocumentsFolderUsageDescription": "Sholly PDF needs access to read and save PDF files.",
         "NSFileProviderDomainUsageDescription": "Sholly PDF needs access to read and save PDF files."
@@ -174,6 +177,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^24.12.2",
