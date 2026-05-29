@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDownloaded:   (cb) => ipcRenderer.on('updater:downloaded',    (_e, info) => cb(info)),
   },
 
+  // License
+  license: {
+    check:      () => ipcRenderer.invoke('license:check'),
+    activate:   (key) => ipcRenderer.invoke('license:activate', key),
+    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+  },
+
   // Platform info
   platform: process.platform,
   isElectron: true,

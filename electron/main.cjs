@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeImage } = requir
 const path = require('path')
 const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
+const { registerLicenseIpc } = require('./license.cjs')
 
 // ── Auto-updater setup ─────────────────────────────────────────────────────────
 autoUpdater.autoDownload = false          // don't download silently; ask user first
@@ -344,6 +345,7 @@ if (!gotLock) {
       if (filePath) pendingFileOpen = filePath
     }
 
+    registerLicenseIpc()
     createWindow()
     buildMenu()
 

@@ -11,6 +11,7 @@ import NewDocDialog from './components/NewDocDialog';
 import SaveDialog from './components/SaveDialog';
 import UpdateDialog from './components/UpdateDialog';
 import RulerArea from './components/Rulers';
+import LicenseGate from './components/LicenseGate';
 import type { DocPage, AppTab } from './types';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
@@ -490,6 +491,19 @@ function DocTabBar({ onOpen }: { onOpen: () => void }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── License gate ─────────────────────────────────────────────────────────────
+  const isElectron = !!(window as any).electronAPI?.isElectron;
+  const [licenseChecked, setLicenseChecked] = useState(!isElectron); // skip in browser
+  const [licensed, setLicensed] = useState(!isElectron);
+
+  useEffect(() => {
+    if (!isElectron) return;
+    (window as any).electronAPI.license.check().then((result: any) => {
+      setLicensed(!!result?.key);
+      setLicenseChecked(true);
+    });
+  }, [isElectron]);
+
   const {
     docName, setDocName, pages, isDirty, scale, setScale,
     openPdf, undo, redo, deleteSelected,
@@ -636,6 +650,9 @@ export default function App() {
     eAPI.onMenuToggleLeft?.(() => setLeftPanelOpen(!leftPanelOpen));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasDoc]);
+
+  if (!licenseChecked) return null; // brief flicker guard while checking
+  if (!licensed) return <LicenseGate onActivated={() => setLicensed(true)} />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--app-bg)' }}>
