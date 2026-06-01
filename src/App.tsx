@@ -10,6 +10,7 @@ import FindBar from './components/FindBar';
 import NewDocDialog from './components/NewDocDialog';
 import SaveDialog from './components/SaveDialog';
 import UpdateDialog from './components/UpdateDialog';
+import LicenseGate from './components/LicenseGate';
 import RulerArea from './components/Rulers';
 import type { DocPage, AppTab } from './types';
 
@@ -490,11 +491,25 @@ function DocTabBar({ onOpen }: { onOpen: () => void }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  // ── License gate ─────────────────────────────────────────────────────────────
-  // Gumroad licensing not yet configured (no Product ID), so the gate is disabled —
-  // the app opens directly. Re-enable by restoring the check below once Gumroad is set up.
-  const [licenseChecked] = useState(true);
-  const [licensed] = useState(true);
+  // ── License gate + free trial ────────────────────────────────────────────────
+  // Entitlement = paid license OR within the 7-day free trial. Browser builds skip
+  // the gate entirely (no electron bridge). When the trial is active but unlicensed
+  // we still run the app and show a countdown banner; once it expires we show the
+  // activation wall (LicenseGate), which both links to purchase and accepts a key.
+  const isElectron = !!(window as any).electronAPI?.isElectron;
+  const [gate, setGate] = useState<'loading' | 'ok' | 'locked'>(isElectron ? 'loading' : 'ok');
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
+
+  const refreshEntitlement = useCallback(() => {
+    if (!isElectron) { setGate('ok'); return; }
+    (window as any).electronAPI.license.status().then((s: any) => {
+      if (s?.licensed) { setGate('ok'); setTrialDaysLeft(null); }
+      else if (s?.trial?.active) { setGate('ok'); setTrialDaysLeft(s.trial.daysLeft); }
+      else { setGate('locked'); setTrialDaysLeft(null); }
+    }).catch(() => { setGate('ok'); }); // fail open so a bug never bricks the app
+  }, [isElectron]);
+
+  useEffect(() => { refreshEntitlement(); }, [refreshEntitlement]);
 
   const {
     docName, setDocName, pages, isDirty, scale, setScale,
@@ -643,10 +658,38 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasDoc]);
 
-  if (!licenseChecked || !licensed) return null; // license gate disabled (always passes)
+  if (gate === 'loading') return null; // brief flicker guard while checking entitlement
+  if (gate === 'locked') return <LicenseGate onActivated={refreshEntitlement} />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--app-bg)' }}>
+
+      {/* ── Free-trial countdown banner ── */}
+      {trialDaysLeft != null && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+          height: 30, flexShrink: 0, fontSize: 12,
+          background: 'var(--accent)', color: '#fff',
+        }}>
+          <span>
+            {trialDaysLeft === 1 ? 'Last day of your free trial' : `${trialDaysLeft} days left in your free trial`}
+          </span>
+          <button
+            onClick={() => (window as any).electronAPI?.license.openPurchase()}
+            style={{
+              background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.5)',
+              color: '#fff', borderRadius: 5, padding: '2px 12px', cursor: 'pointer',
+              fontSize: 11.5, fontWeight: 600,
+            }}>
+            Buy now
+          </button>
+          <button
+            onClick={() => setGate('locked')}
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: 11.5, textDecoration: 'underline' }}>
+            Enter key
+          </button>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div style={{

@@ -43,11 +43,30 @@ export default function LicenseGate({ onActivated }: Props) {
             Sholly PDF
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted, #8e8e93)', marginTop: 6 }}>
-            Enter your license key to activate
+            Your free trial has ended — purchase a license to keep going.
           </div>
         </div>
 
-        {/* Input */}
+        {/* Purchase (new customers) */}
+        <button
+          onClick={() => (window as any).electronAPI?.license.openPurchase()}
+          style={{
+            padding: '12px 0', borderRadius: 10, border: 'none',
+            background: '#0a84ff', color: '#fff', fontSize: 15, fontWeight: 600,
+            cursor: 'pointer', transition: 'background 0.15s',
+          }}
+        >
+          Purchase a license
+        </button>
+
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted, #8e8e93)', fontSize: 11.5 }}>
+          <div style={{ flex: 1, height: 1, background: 'var(--border, rgba(255,255,255,0.12))' }} />
+          ALREADY PURCHASED?
+          <div style={{ flex: 1, height: 1, background: 'var(--border, rgba(255,255,255,0.12))' }} />
+        </div>
+
+        {/* Key input (existing customers) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input
             type="text"
@@ -64,7 +83,6 @@ export default function LicenseGate({ onActivated }: Props) {
               fontFamily: 'monospace', letterSpacing: 1,
               outline: 'none',
             }}
-            autoFocus
           />
           {error && (
             <div style={{ fontSize: 12, color: '#ff453a', paddingLeft: 2 }}>{error}</div>
@@ -76,28 +94,16 @@ export default function LicenseGate({ onActivated }: Props) {
           onClick={handleActivate}
           disabled={loading}
           style={{
-            padding: '12px 0', borderRadius: 10, border: 'none',
-            background: loading ? 'rgba(10,132,255,0.5)' : '#0a84ff',
-            color: '#fff', fontSize: 15, fontWeight: 600,
+            padding: '12px 0', borderRadius: 10,
+            border: '1px solid var(--border, rgba(255,255,255,0.18))',
+            background: loading ? 'rgba(255,255,255,0.06)' : 'transparent',
+            color: 'var(--text, #f5f5f7)', fontSize: 15, fontWeight: 600,
             cursor: loading ? 'default' : 'pointer',
             transition: 'background 0.15s',
           }}
         >
-          {loading ? 'Activating…' : 'Activate License'}
+          {loading ? 'Activating…' : 'Activate with key'}
         </button>
-
-        {/* Buy link */}
-        <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted, #8e8e93)' }}>
-          Don't have a license?{' '}
-          <a
-            href="https://shollyp007.gumroad.com/l/sholly-pdf"
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: '#0a84ff', textDecoration: 'none' }}
-          >
-            Buy Sholly PDF
-          </a>
-        </div>
       </div>
     </div>
   );

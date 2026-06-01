@@ -36,9 +36,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // License
   license: {
-    check:      () => ipcRenderer.invoke('license:check'),
-    activate:   (key) => ipcRenderer.invoke('license:activate', key),
-    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+    check:        () => ipcRenderer.invoke('license:check'),
+    status:       () => ipcRenderer.invoke('license:status'),
+    activate:     (key) => ipcRenderer.invoke('license:activate', key),
+    deactivate:   () => ipcRenderer.invoke('license:deactivate'),
+    openPurchase: () => ipcRenderer.invoke('license:open-purchase'),
   },
 
   // Platform info
