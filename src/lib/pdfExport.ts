@@ -34,8 +34,50 @@ export interface ExportOptions {
   originalBytes: ArrayBuffer | null;
   pages: DocPage[];
   annotations: Annotation[];
-  canvasInfos: Array<{ width: number; height: number }>;
+  canvasInfos: Array<{ width: number; height: number; dataUrl?: string }>;
   formFieldValues?: Record<string, string | boolean>;
+}
+
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/**
+ * TRUE REDACTION: bakes opaque black boxes directly into the page's rendered
+ * image so the pixels (and any text) under each box are physically destroyed —
+ * not merely covered by a removable overlay. Returns a JPEG data URL of the
+ * flattened page, or null if it can't be produced.
+ */
+async function bakeRedactions(
+  dataUrl: string,
+  rects: Array<{ x: number; y: number; width: number; height: number }>,
+  canvasW: number,
+  canvasH: number,
+): Promise<string | null> {
+  try {
+    const img = await loadImg(dataUrl);
+    const cv = document.createElement('canvas');
+    cv.width = img.naturalWidth || img.width;
+    cv.height = img.naturalHeight || img.height;
+    const ctx = cv.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    // Map annotation coords (canvas CSS space) to the snapshot's pixel space.
+    const sx = cv.width / canvasW;
+    const sy = cv.height / canvasH;
+    ctx.fillStyle = '#000';
+    for (const r of rects) {
+      ctx.fillRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
+    }
+    return cv.toDataURL('image/jpeg', 0.92);
+  } catch (e) {
+    console.warn('Could not bake redactions into page image:', e);
+    return null;
+  }
 }
 
 export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
@@ -76,8 +118,25 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
     const docPage = pages[i];
     const canvasInfo = canvasInfos[i] ?? { width: docPage.pdfWidth, height: docPage.pdfHeight };
 
+    const pageAnnots = annotations.filter((a) => a.pageId === docPage.id);
+    const redactRects = pageAnnots.filter((a) => a.type === 'redact') as Array<{ x: number; y: number; width: number; height: number }>;
+
+    // Secure redaction: when a page has redactions, replace its original
+    // (text-bearing) content with a flattened image that has the redaction
+    // boxes burned into the pixels, so nothing under a box can be recovered.
+    let redactedBg: string | null = null;
+    if (redactRects.length > 0 && canvasInfo.dataUrl) {
+      redactedBg = await bakeRedactions(canvasInfo.dataUrl, redactRects, canvasInfo.width, canvasInfo.height);
+    }
+
     let page;
-    if (docPage.source === 'original' && srcDoc && docPage.originalIndex !== undefined) {
+    let rasterized = false;
+    if (redactedBg) {
+      page = pdfDoc.addPage([docPage.pdfWidth, docPage.pdfHeight]);
+      page.drawRectangle({ x: 0, y: 0, width: docPage.pdfWidth, height: docPage.pdfHeight, color: rgb(1, 1, 1) });
+      await embedCanvasBackground(pdfDoc, page, { width: canvasInfo.width, height: canvasInfo.height, dataUrl: redactedBg });
+      rasterized = true;
+    } else if (docPage.source === 'original' && srcDoc && docPage.originalIndex !== undefined) {
       try {
         const [copied] = await pdfDoc.copyPages(srcDoc, [docPage.originalIndex]);
         page = pdfDoc.addPage(copied);
@@ -100,8 +159,6 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
     const { width: pdfW, height: pdfH } = page.getSize();
     const scaleX = pdfW / canvasInfo.width;
     const scaleY = pdfH / canvasInfo.height;
-
-    const pageAnnots = annotations.filter((a) => a.pageId === docPage.id);
 
     for (const ann of pageAnnots) {
       try {
@@ -129,6 +186,19 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
             height: ann.height * scaleY,
             color: rgb(1, 1, 1),
           });
+        } else if (ann.type === 'redact') {
+          // On rasterized pages the box is already burned into the image. This
+          // branch only fires as a fallback when no page snapshot was available;
+          // it draws an opaque box (less secure — original text stream remains).
+          if (!rasterized) {
+            page.drawRectangle({
+              x: ann.x * scaleX,
+              y: pdfH - (ann.y + ann.height) * scaleY,
+              width: ann.width * scaleX,
+              height: ann.height * scaleY,
+              color: rgb(0, 0, 0),
+            });
+          }
         } else if (ann.type === 'highlight') {
           page.drawRectangle({
             x: ann.x * scaleX,
