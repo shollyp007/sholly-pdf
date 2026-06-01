@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { buildPdfBytes, pickSaveTarget, writeToTarget, saveToHandle } from '../lib/pdfExport';
+import { encryptPdf } from '../lib/pdfEncrypt';
 import type { CanvasInfo } from './PDFViewer';
 import type { SaveTarget } from '../lib/pdfExport';
 
@@ -23,6 +24,18 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
   const [done, setDone] = useState(false);
   const [savedLocation, setSavedLocation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [protect, setProtect] = useState(false);
+  const [password, setPassword] = useState('');
+  const [restrict, setRestrict] = useState(false);
+
+  // Build the PDF bytes, applying password encryption when requested.
+  async function buildBytes(): Promise<Uint8Array> {
+    const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues });
+    if (protect && password.trim()) {
+      return encryptPdf(bytes, { password: password.trim(), restrict });
+    }
+    return bytes;
+  }
 
   async function handleSave() {
     setError(null);
@@ -31,7 +44,7 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
     if (mode === 'save' && lastSavedHandle) {
       setLoading(true);
       try {
-        const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues });
+        const bytes = await buildBytes();
         await saveToHandle(bytes, lastSavedHandle);
         markSaved();
         const loc = lastSavedHandle.name.split('/').pop() ?? lastSavedHandle.name;
@@ -61,7 +74,7 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
 
       setLoading(true);
       try {
-        const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues });
+        const bytes = await buildBytes();
         const path = await writeToTarget(bytes, target, filename + '.pdf');
 
         if (target.kind === 'fsapi') setLastSavedHandle(target.handle);
@@ -93,7 +106,7 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
 
       setLoading(true);
       try {
-        const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues });
+        const bytes = await buildBytes();
         if (target) {
           const path = await writeToTarget(bytes, target, exportName);
           setSavedLocation(path);
@@ -125,7 +138,7 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
 
       setLoading(true);
       try {
-        const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues });
+        const bytes = await buildBytes();
         if (target) {
           const path = await writeToTarget(bytes, target, copyName);
           setSavedLocation(path);
@@ -227,10 +240,43 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
               </div>
             )}
 
+            {/* Password protection */}
+            <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', cursor: 'pointer', background: protect ? 'rgba(79,123,255,0.07)' : 'var(--panel2)' }}>
+                <input type="checkbox" checked={protect} onChange={(e) => setProtect(e.target.checked)} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-bright)' }}>🔒 Password protect</span>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>Encrypt this PDF</span>
+              </label>
+              {protect && (
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border)' }}>
+                  <input
+                    className="sp-input" type="password" value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password to open the document"
+                    autoComplete="new-password"
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={restrict} onChange={(e) => setRestrict(e.target.checked)} />
+                    Also prevent copying &amp; editing
+                  </label>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    Recipients will need this password to open the file. Keep it safe — it can't be recovered.
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Destination hint */}
             {destHint && (
               <div style={{ marginBottom: 14, padding: '8px 12px', background: 'rgba(79,123,255,0.07)', border: '1px solid rgba(79,123,255,0.18)', borderRadius: 8, fontSize: 12, color: 'var(--text-dim)' }}>
                 {destHint}
+              </div>
+            )}
+
+            {/* Warn if protection is on but no password typed */}
+            {protect && !password.trim() && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: 8, fontSize: 12, color: '#eab308' }}>
+                Enter a password, or uncheck “Password protect” to save without encryption.
               </div>
             )}
 
@@ -244,10 +290,10 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="sp-btn" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
               <button className="sp-btn sp-btn-primary" style={{ flex: 2, gap: 7, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={handleSave} disabled={loading}>
+                onClick={handleSave} disabled={loading || (protect && !password.trim())}>
                 {loading
-                  ? <><span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>⟳</span> Saving…</>
-                  : opts.find((o) => o.id === mode)?.title}
+                  ? <><span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>⟳</span> {protect ? 'Encrypting…' : 'Saving…'}</>
+                  : (protect ? '🔒 ' : '') + (opts.find((o) => o.id === mode)?.title ?? 'Save')}
               </button>
             </div>
           </>
