@@ -9,11 +9,84 @@ interface Props {
 const CANVAS_W = 440;
 const CANVAS_H = 180;
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// Extract a signature from a photo/scan of ink on paper: make the bright paper
+// background transparent while keeping the dark ink strokes, then crop to the
+// signature's bounding box. `sensitivity` (0–100) shifts how aggressively the
+// background is removed. Runs entirely client-side on a canvas.
+async function extractSignature(src: string, sensitivity: number): Promise<string> {
+  const img = await loadImage(src);
+  const maxDim = 1400;
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  const sc = Math.min(1, maxDim / Math.max(w, h));
+  w = Math.max(1, Math.round(w * sc));
+  h = Math.max(1, Math.round(h * sc));
+
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(img, 0, 0, w, h);
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+
+  const lum = (i: number) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+
+  // Estimate paper brightness from the border pixels (signature rarely touches edges).
+  let bgSum = 0, bgCount = 0;
+  for (let x = 0; x < w; x += 2) { bgSum += lum((0 * w + x) * 4); bgSum += lum(((h - 1) * w + x) * 4); bgCount += 2; }
+  for (let y = 0; y < h; y += 2) { bgSum += lum((y * w + 0) * 4); bgSum += lum((y * w + (w - 1)) * 4); bgCount += 2; }
+  const bg = bgCount ? bgSum / bgCount : 230;
+
+  // Higher sensitivity → higher cutoff → more of the lighter pixels become ink.
+  const frac = 0.55 + (sensitivity / 100) * 0.40; // 0.55 .. 0.95
+  const cutoff = bg * frac;
+  const feather = Math.max(18, bg * 0.12);
+
+  let minX = w, minY = h, maxX = 0, maxY = 0, any = false;
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 4;
+    const a = Math.min(1, Math.max(0, (cutoff - lum(i)) / feather));
+    d[i + 3] = Math.round(a * 255);
+    if (a > 0.06) {
+      const x = p % w, y = (p / w) | 0;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      any = true;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  if (!any) return cv.toDataURL('image/png');
+
+  const pad = 8;
+  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+  maxX = Math.min(w - 1, maxX + pad); maxY = Math.min(h - 1, maxY + pad);
+  const cw = maxX - minX + 1, ch = maxY - minY + 1;
+  const out = document.createElement('canvas');
+  out.width = cw; out.height = ch;
+  out.getContext('2d')!.drawImage(cv, minX, minY, cw, ch, 0, 0, cw, ch);
+  return out.toDataURL('image/png');
+}
+
+const CHECKER_BG = 'repeating-conic-gradient(#d8d8d8 0% 25%, #fff 0% 50%) 50% / 16px 16px';
+
 export default function SignatureModal({ onInsert, onClose }: Props) {
   const [tab, setTab] = useState<'draw' | 'type' | 'upload'>('draw');
   const [typedText, setTypedText] = useState('');
   const [typedFont, setTypedFont] = useState('cursive');
   const [uploadDataUrl, setUploadDataUrl] = useState<string | null>(null);
+  const [removeBg, setRemoveBg] = useState(true);
+  const [sensitivity, setSensitivity] = useState(50);
+  const [processedUrl, setProcessedUrl] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -32,6 +105,18 @@ export default function SignatureModal({ onInsert, onClose }: Props) {
     initCanvas(ctx);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-extract the signature whenever the source image or controls change.
+  useEffect(() => {
+    if (!uploadDataUrl || !removeBg) { setProcessedUrl(null); return; }
+    let cancelled = false;
+    setProcessing(true);
+    extractSignature(uploadDataUrl, sensitivity)
+      .then((url) => { if (!cancelled) setProcessedUrl(url); })
+      .catch(() => { if (!cancelled) setProcessedUrl(null); })
+      .finally(() => { if (!cancelled) setProcessing(false); });
+    return () => { cancelled = true; };
+  }, [uploadDataUrl, removeBg, sensitivity]);
 
   function initCanvas(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = '#fff';
@@ -92,7 +177,7 @@ export default function SignatureModal({ onInsert, onClose }: Props) {
       const file = input.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => setUploadDataUrl(reader.result as string);
+      reader.onload = () => { setProcessedUrl(null); setUploadDataUrl(reader.result as string); };
       reader.readAsDataURL(file);
     };
     input.click();
@@ -116,14 +201,15 @@ export default function SignatureModal({ onInsert, onClose }: Props) {
       ctx.fillText(typedText, CANVAS_W / 2, 65);
       onInsert(off.toDataURL('image/png'));
     } else if (tab === 'upload' && uploadDataUrl) {
-      onInsert(uploadDataUrl);
+      onInsert(removeBg && processedUrl ? processedUrl : uploadDataUrl);
     }
   }
 
+  const uploadResult = removeBg ? processedUrl : uploadDataUrl;
   const canInsert =
     (tab === 'draw' && hasDrawing) ||
     (tab === 'type' && typedText.trim().length > 0) ||
-    (tab === 'upload' && !!uploadDataUrl);
+    (tab === 'upload' && !!uploadResult && !processing);
 
   const TABS = [
     { id: 'draw' as const, label: '✍ Draw' },
@@ -247,17 +333,49 @@ export default function SignatureModal({ onInsert, onClose }: Props) {
               {uploadDataUrl ? (
                 <div>
                   <div style={{
-                    height: CANVAS_H, borderRadius: 8, background: '#fff',
+                    height: CANVAS_H, borderRadius: 8,
+                    background: removeBg ? CHECKER_BG : '#fff',
                     border: '1px solid var(--border-light)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    marginBottom: 10,
+                    marginBottom: 10, position: 'relative', overflow: 'hidden',
                   }}>
-                    <img src={uploadDataUrl} alt="Signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    <img
+                      src={(removeBg ? processedUrl : uploadDataUrl) || uploadDataUrl}
+                      alt="Signature"
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', opacity: processing ? 0.4 : 1, transition: 'opacity 0.1s' }}
+                    />
+                    {processing && (
+                      <span style={{ position: 'absolute', fontSize: 11, color: '#555', background: 'rgba(255,255,255,0.85)', padding: '3px 10px', borderRadius: 12 }}>
+                        Extracting…
+                      </span>
+                    )}
                   </div>
+
+                  {/* Background-removal controls */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dim)', cursor: 'pointer', marginBottom: removeBg ? 10 : 0 }}>
+                    <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} />
+                    Remove paper background (extract ink)
+                  </label>
+                  {removeBg && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Sensitivity</span>
+                      <input
+                        type="range" min={0} max={100} value={sensitivity}
+                        onChange={(e) => setSensitivity(Number(e.target.value))}
+                        style={{ flex: 1, accentColor: 'var(--accent)' }}
+                      />
+                    </div>
+                  )}
+
                   <button onClick={handleUpload}
                     style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', padding: '3px 12px' }}>
                     Change Image
                   </button>
+                  {removeBg && (
+                    <p style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.4 }}>
+                      Tip: sign with a dark pen on plain white paper and take a well-lit photo. Drag the slider if strokes are faint or the background isn't fully removed.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div
@@ -272,8 +390,8 @@ export default function SignatureModal({ onInsert, onClose }: Props) {
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-dim)'; }}
                 >
                   <span style={{ fontSize: 28, opacity: 0.5 }}>⬆</span>
-                  <span style={{ fontSize: 12 }}>Click to upload a signature image</span>
-                  <span style={{ fontSize: 11, opacity: 0.6 }}>PNG, JPG, GIF supported</span>
+                  <span style={{ fontSize: 12 }}>Upload a photo of your signature on paper</span>
+                  <span style={{ fontSize: 11, opacity: 0.6 }}>We'll extract the ink onto a transparent background</span>
                 </div>
               )}
             </div>
