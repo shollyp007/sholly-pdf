@@ -26,8 +26,24 @@ const PURCHASE_URL = 'https://shollyp007.gumroad.com/l/sholly-pdf'
 const TRIAL_DAYS = 7
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// How many machines a single license key may be activated on.
+const SEAT_LIMIT = 2
+
 const LICENSE_FILE = path.join(app.getPath('userData'), 'sholly-license.json')
 const TRIAL_FILE = path.join(app.getPath('userData'), 'sholly-trial.json')
+const DEVICE_FILE = path.join(app.getPath('userData'), 'sholly-device.json')
+
+// Stable per-machine id, generated once and reused. Recorded with the license so
+// activations can be identified for support.
+function getDeviceId() {
+  try {
+    const d = JSON.parse(fs.readFileSync(DEVICE_FILE, 'utf8'))
+    if (d.id) return d.id
+  } catch {}
+  const id = crypto.randomUUID()
+  try { fs.writeFileSync(DEVICE_FILE, JSON.stringify({ id })) } catch {}
+  return id
+}
 
 function readLicense() {
   try { return JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf8')) }
@@ -74,12 +90,12 @@ function getStatus() {
   }
 }
 
-function verifyWithGumroad(licenseKey) {
+function verifyWithGumroad(licenseKey, increment) {
   return new Promise((resolve, reject) => {
     const body = new URLSearchParams({
       product_id: GUMROAD_PRODUCT_ID,
       license_key: licenseKey.trim(),
-      increment_uses_count: 'false',
+      increment_uses_count: increment ? 'true' : 'false',
     }).toString()
 
     const req = https.request({
@@ -132,14 +148,28 @@ function registerLicenseIpc() {
     }
 
     try {
-      const result = await verifyWithGumroad(licenseKey)
-      if (!result.success) {
+      // 1) Validate the key WITHOUT consuming a seat, and read the current device count.
+      const check = await verifyWithGumroad(trimmed, false)
+      if (!check.success) {
         return { success: false, error: 'Invalid license key. Please check and try again.' }
       }
+      const purchase = check.purchase || {}
+      if (purchase.refunded || purchase.chargebacked || purchase.disputed) {
+        return { success: false, error: 'This license was refunded or disputed and is no longer valid.' }
+      }
+      // 2) Enforce the per-key device limit using Gumroad's server-side uses count.
+      const uses = typeof check.uses === 'number' ? check.uses : 0
+      if (uses >= SEAT_LIMIT) {
+        return { success: false, error: `This key is already in use on ${SEAT_LIMIT} devices. Email support to free a slot.` }
+      }
+      // 3) Claim a seat (increments the count), then store the license locally.
+      await verifyWithGumroad(trimmed, true)
       const data = {
-        key: licenseKey.trim(),
+        key: trimmed,
         activatedAt: new Date().toISOString(),
-        email: result.purchase?.email || '',
+        email: purchase.email || '',
+        deviceId: getDeviceId(),
+        source: 'gumroad',
       }
       writeLicense(data)
       return { success: true, ...data }
