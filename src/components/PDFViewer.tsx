@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { useEditorStore, generateId } from '../store/editorStore';
 import { pdfDocCache } from '../lib/pdfCache';
 import AnnotationLayer from './AnnotationLayer';
 import FormFieldLayer from './FormFieldLayer';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 export interface CanvasInfo { width: number; height: number; dataUrl?: string; }
 export interface PDFViewerHandle { getCanvasInfos: () => CanvasInfo[]; }
@@ -197,6 +197,7 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
   const renderGen = useRef(0); // generation counter to cancel stale renders
+  const renderTasks = useRef<Map<string, pdfjsLib.RenderTask>>(new Map()); // in-flight render per page
 
   useImperativeHandle(ref, () => ({
     getCanvasInfos: () => pageStates.map((ps) => ({
@@ -267,8 +268,18 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
       const canvas = canvasRefs.current.get(ps.pageId);
       if (!canvas) continue;
       if (!pdfDoc) continue;
+      // Cancel any in-flight render targeting this same canvas before starting a new one.
+      // Two concurrent render() calls on one canvas corrupt pdf.js's transform state and
+      // can leave the page mirrored/rotated 180°, so renders must be serialized per canvas.
+      const prev = renderTasks.current.get(ps.pageId);
+      if (prev) {
+        prev.cancel();
+        try { await prev.promise; } catch { /* RenderingCancelledException expected */ }
+        if (gen !== renderGen.current) break;
+      }
       try {
         const pdfPage = await pdfDoc.getPage(page.originalIndex + 1);
+        if (gen !== renderGen.current) break;
         // Guard against stale pageStates using CSS-pixel viewport
         const vpCss = pdfPage.getViewport({ scale, rotation: page.rotation });
         if (Math.round(vpCss.width) !== ps.canvasWidth || Math.round(vpCss.height) !== ps.canvasHeight) continue;
@@ -280,8 +291,11 @@ const PDFViewer = forwardRef<PDFViewerHandle>(function PDFViewer(_, ref) {
         canvas.style.height = ps.canvasHeight + 'px';
         const ctx = canvas.getContext('2d')!;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        await pdfPage.render({ canvasContext: ctx, viewport: vpHiDpi, canvas }).promise;
-      } catch { /* ignore */ }
+        const task = pdfPage.render({ canvasContext: ctx, viewport: vpHiDpi, canvas });
+        renderTasks.current.set(ps.pageId, task);
+        await task.promise;
+        renderTasks.current.delete(ps.pageId);
+      } catch { /* render cancelled or failed — ignore */ }
     }
   }, [pageStates, scale, pages, pdfDoc]);
 

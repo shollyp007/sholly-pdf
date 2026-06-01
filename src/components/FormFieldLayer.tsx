@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { useEditorStore } from '../store/editorStore';
 
 interface FieldRect { x: number; y: number; w: number; h: number; }
