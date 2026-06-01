@@ -1,7 +1,7 @@
 {
   "name": "sholly-pdf",
   "private": true,
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "A fast, cross-platform PDF editor",
   "homepage": "https://github.com/shollyp007/sholly-pdf",
   "author": {
@@ -25,6 +25,7 @@
     "appId": "com.sholly.pdf",
     "productName": "Sholly PDF",
     "copyright": "Copyright © 2025 Sholly PDF",
+    "afterSign": "electron/notarize.cjs",
     "asar": true,
     "files": [
       "dist/**/*",
@@ -69,9 +70,7 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "identity": "Developer ID Application",
       "notarize": false,
-      "afterSign": "electron/notarize.cjs",
       "extendInfo": {
         "NSDocumentsFolderUsageDescription": "Sholly PDF needs access to read and save PDF files.",
         "NSFileProviderDomainUsageDescription": "Sholly PDF needs access to read and save PDF files."

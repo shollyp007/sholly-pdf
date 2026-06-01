@@ -11,7 +11,6 @@ import NewDocDialog from './components/NewDocDialog';
 import SaveDialog from './components/SaveDialog';
 import UpdateDialog from './components/UpdateDialog';
 import RulerArea from './components/Rulers';
-import LicenseGate from './components/LicenseGate';
 import type { DocPage, AppTab } from './types';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
@@ -492,17 +491,10 @@ function DocTabBar({ onOpen }: { onOpen: () => void }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   // ── License gate ─────────────────────────────────────────────────────────────
-  const isElectron = !!(window as any).electronAPI?.isElectron;
-  const [licenseChecked, setLicenseChecked] = useState(!isElectron); // skip in browser
-  const [licensed, setLicensed] = useState(!isElectron);
-
-  useEffect(() => {
-    if (!isElectron) return;
-    (window as any).electronAPI.license.check().then((result: any) => {
-      setLicensed(!!result?.key);
-      setLicenseChecked(true);
-    });
-  }, [isElectron]);
+  // Gumroad licensing not yet configured (no Product ID), so the gate is disabled —
+  // the app opens directly. Re-enable by restoring the check below once Gumroad is set up.
+  const [licenseChecked] = useState(true);
+  const [licensed] = useState(true);
 
   const {
     docName, setDocName, pages, isDirty, scale, setScale,
@@ -525,7 +517,7 @@ export default function App() {
   const hasDoc = pages.length > 0;
 
   const openFile = useCallback(async (file: File) => {
-    const pdfjsLib = await import('pdfjs-dist');
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const bytes = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
     pdfDocCache.set(file, pdf); // cache so PDFViewer doesn't re-parse
@@ -651,8 +643,7 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasDoc]);
 
-  if (!licenseChecked) return null; // brief flicker guard while checking
-  if (!licensed) return <LicenseGate onActivated={() => setLicensed(true)} />;
+  if (!licenseChecked || !licensed) return null; // license gate disabled (always passes)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--app-bg)' }}>
