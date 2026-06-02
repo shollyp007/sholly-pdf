@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, LineCapStyle, PDFTextField, PDFCheckBox, PDFDropdown } from 'pdf-lib';
 import type { Annotation, DocPage } from '../types';
+import type { OcrWord } from './ocr';
 
 function blendWithWhite(color: ReturnType<typeof rgb>, alpha: number) {
   return rgb(
@@ -36,6 +37,7 @@ export interface ExportOptions {
   annotations: Annotation[];
   canvasInfos: Array<{ width: number; height: number; dataUrl?: string }>;
   formFieldValues?: Record<string, string | boolean>;
+  ocrResults?: Record<string, OcrWord[]>;
 }
 
 function loadImg(src: string): Promise<HTMLImageElement> {
@@ -81,7 +83,7 @@ async function bakeRedactions(
 }
 
 export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
-  const { originalBytes, pages, annotations, canvasInfos, formFieldValues } = opts;
+  const { originalBytes, pages, annotations, canvasInfos, formFieldValues, ocrResults } = opts;
 
   // Base document: load original or create new
   let srcDoc: PDFDocument | null = null;
@@ -113,6 +115,8 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
   }
 
   const pdfDoc = await PDFDocument.create();
+  // Lazily-embedded font for the invisible OCR text layer.
+  let ocrFont: Awaited<ReturnType<PDFDocument['embedFont']>> | null = null;
 
   for (let i = 0; i < pages.length; i++) {
     const docPage = pages[i];
@@ -268,6 +272,28 @@ export async function buildPdfBytes(opts: ExportOptions): Promise<Uint8Array> {
         }
       } catch (e) {
         console.warn('Failed to export annotation', ann.type, e);
+      }
+    }
+
+    // ── Invisible OCR text layer (makes scanned pages searchable/selectable) ──
+    const ocrWords = ocrResults?.[docPage.id];
+    if (ocrWords && ocrWords.length) {
+      if (!ocrFont) ocrFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      for (const w of ocrWords) {
+        // StandardFonts only encode WinAnsi; strip anything that would throw.
+        const text = w.text.replace(/[^\x20-\x7E]/g, '').trim();
+        if (!text) continue;
+        const size = Math.max(4, w.height * scaleY * 0.9);
+        try {
+          page.drawText(text, {
+            x: w.x * scaleX,
+            y: pdfH - (w.y + w.height) * scaleY,
+            size,
+            font: ocrFont,
+            color: rgb(0, 0, 0),
+            opacity: 0, // invisible but still selectable & searchable
+          });
+        } catch { /* skip un-encodable word */ }
       }
     }
   }

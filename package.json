@@ -11,15 +11,16 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "setup:tesseract": "node scripts/setup-tesseract.mjs",
+    "dev": "node scripts/setup-tesseract.mjs && vite",
+    "build": "node scripts/setup-tesseract.mjs && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "tsc -b && vite build && electron-builder --mac --win --linux",
-    "electron:build:mac": "tsc -b && vite build && electron-builder --mac",
-    "electron:build:win": "tsc -b && vite build && electron-builder --win",
-    "electron:build:linux": "tsc -b && vite build && electron-builder --linux"
+    "electron:dev": "node scripts/setup-tesseract.mjs && concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "node scripts/setup-tesseract.mjs && tsc -b && vite build && electron-builder --mac --win --linux",
+    "electron:build:mac": "node scripts/setup-tesseract.mjs && tsc -b && vite build && electron-builder --mac",
+    "electron:build:win": "node scripts/setup-tesseract.mjs && tsc -b && vite build && electron-builder --win",
+    "electron:build:linux": "node scripts/setup-tesseract.mjs && tsc -b && vite build && electron-builder --linux"
   },
   "build": {
     "appId": "com.sholly.pdf",
@@ -27,6 +28,9 @@
     "copyright": "Copyright © 2025 Sholly PDF",
     "afterSign": "electron/notarize.cjs",
     "asar": true,
+    "asarUnpack": [
+      "dist/tesseract/**"
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -174,6 +178,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-pdf": "^10.4.1",
+    "tesseract.js": "^5.1.1",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

@@ -9,6 +9,7 @@ import PropertiesPanel from './components/PropertiesPanel';
 import FindBar from './components/FindBar';
 import NewDocDialog from './components/NewDocDialog';
 import SaveDialog from './components/SaveDialog';
+import OcrDialog from './components/OcrDialog';
 import UpdateDialog from './components/UpdateDialog';
 import LicenseGate from './components/LicenseGate';
 import RulerArea from './components/Rulers';
@@ -518,6 +519,7 @@ export default function App() {
     leftPanelOpen, setLeftPanelOpen,
     rightPanelOpen, setRightPanelOpen,
     showFindBar,
+    showOcr, setShowOcr,
     historyIndex, history,
     setActiveTool,
     tabs,
@@ -863,6 +865,7 @@ export default function App() {
       {/* ── Dialogs ── */}
       {showNewDoc && <NewDocDialog onClose={() => setShowNewDoc(false)} />}
       {showSave   && <SaveDialog   onClose={() => setShowSave(false)}   canvasInfos={getCanvasInfos()} />}
+      {showOcr    && <OcrDialog    onClose={() => setShowOcr(false)}    canvasInfos={getCanvasInfos()} />}
       <UpdateDialog />
 
       {/* ── Unsaved-changes close warning ── */}

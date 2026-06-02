@@ -15,7 +15,7 @@ const canPickLocation = hasFSAPI || hasElectron;
 export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => void; canvasInfos: CanvasInfo[] }) {
   const {
     docName, setDocName, pages, annotations, originalPdfBytes,
-    lastSavedHandle, setLastSavedHandle, markSaved, formFieldValues,
+    lastSavedHandle, setLastSavedHandle, markSaved, formFieldValues, ocrResults,
   } = useEditorStore();
 
   const [mode, setMode] = useState<Mode>(lastSavedHandle ? 'save' : 'saveAs');
@@ -30,7 +30,7 @@ export default function SaveDialog({ onClose, canvasInfos }: { onClose: () => vo
 
   // Build the PDF bytes, applying password encryption when requested.
   async function buildBytes(): Promise<Uint8Array> {
-    const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues });
+    const bytes = await buildPdfBytes({ originalBytes: originalPdfBytes, pages, annotations, canvasInfos, formFieldValues, ocrResults });
     if (protect && password.trim()) {
       return encryptPdf(bytes, { password: password.trim(), restrict });
     }

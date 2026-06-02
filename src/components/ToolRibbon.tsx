@@ -171,7 +171,7 @@ export default function ToolRibbon() {
     stampText, setStampText, stampColor, setStampColor,
     addBlankPage, deletePage, duplicatePage, rotatePage, currentPageId,
     undo, redo,
-    setShowFindBar, showFindBar,
+    setShowFindBar, showFindBar, setShowOcr,
     selectedIds, annotations, updateAnnotation,
   } = useEditorStore();
 
@@ -423,6 +423,9 @@ export default function ToolRibbon() {
       className="sp-toolbar px-1">
       <Group title="Find">
         <ActionBtn icon="🔍" label="Find Text" onClick={() => setShowFindBar(!showFindBar)} active={showFindBar} />
+      </Group>
+      <Group title="Recognize">
+        <ActionBtn icon="🔎" label="OCR / Searchable" onClick={() => setShowOcr(true)} />
       </Group>
       <Group title="Print">
         <ActionBtn icon="🖨" label="Print" onClick={() => window.print()} />

@@ -33,3 +33,9 @@ release/
 *.sln
 *.sw?
 .env.signing
+
+# Tesseract engine files are copied from node_modules at build time (scripts/setup-tesseract.mjs).
+# Only the language data is committed.
+public/tesseract/worker.min.js
+public/tesseract/*.wasm
+public/tesseract/*.wasm.js

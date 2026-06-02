@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Annotation, ToolType, DocPage, PageSize, PageOrientation, AppTab, LeftPanelTab } from '../types';
 import { PAGE_SIZES } from '../types';
+import type { OcrWord } from '../lib/ocr';
 
 let _id = 0;
 export const newPageId = () => `pg-${++_id}-${Date.now()}`;
@@ -21,6 +22,7 @@ export interface TabSnap {
   isDirty: boolean;
   lastSavedHandle: FileSystemFileHandle | null;
   formFieldValues: Record<string, string | boolean>;
+  ocrResults: Record<string, OcrWord[]>;
 }
 
 function makeEmptyTab(id: string): TabSnap {
@@ -28,7 +30,7 @@ function makeEmptyTab(id: string): TabSnap {
     id, docName: 'Untitled', pdfFile: null, originalPdfBytes: null,
     pages: [], currentPageId: null,
     annotations: [], selectedIds: [], history: [[]], historyIndex: 0,
-    isDirty: false, lastSavedHandle: null, formFieldValues: {},
+    isDirty: false, lastSavedHandle: null, formFieldValues: {}, ocrResults: {},
   };
 }
 
@@ -40,6 +42,7 @@ function captureTab(s: EditorState): TabSnap {
     annotations: s.annotations, selectedIds: s.selectedIds,
     history: s.history, historyIndex: s.historyIndex,
     isDirty: s.isDirty, lastSavedHandle: s.lastSavedHandle, formFieldValues: s.formFieldValues,
+    ocrResults: s.ocrResults,
   };
 }
 
@@ -72,6 +75,7 @@ interface EditorState {
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
   showFindBar: boolean;
+  showOcr: boolean;
   findQuery: string;
 
   // Tool
@@ -124,6 +128,7 @@ interface EditorState {
   setLeftPanelOpen: (v: boolean) => void;
   setRightPanelOpen: (v: boolean) => void;
   setShowFindBar: (v: boolean) => void;
+  setShowOcr: (v: boolean) => void;
   setFindQuery: (q: string) => void;
   setCurrentPageId: (id: string) => void;
 
@@ -182,6 +187,8 @@ interface EditorState {
   // Form fields (AcroForm filling)
   formFieldValues: Record<string, string | boolean>;
   setFormFieldValue: (name: string, value: string | boolean) => void;
+  ocrResults: Record<string, OcrWord[]>;
+  setPageOcr: (pageId: string, words: OcrWord[]) => void;
 
   // Edit-text tool: signals AnnotationLayer to enter edit mode for a newly-created text annotation
   pendingEditTextId: string | null;
@@ -222,6 +229,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   leftPanelOpen: true,
   rightPanelOpen: true,
   showFindBar: false,
+  showOcr: false,
   findQuery: '',
   activeTool: 'select',
   strokeColor: '#1e293b',
@@ -253,6 +261,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isDirty: false,
   lastSavedHandle: null,
   formFieldValues: {},
+  ocrResults: {},
   pendingEditTextId: null,
   pendingEditClickPos: null,
 
@@ -271,6 +280,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       pages: [page], currentPageId: page.id,
       annotations: [], selectedIds: [], history: [[]] as Annotation[][], historyIndex: 0,
       isDirty: false, lastSavedHandle: null, formFieldValues: {} as Record<string, string | boolean>,
+      ocrResults: {} as Record<string, OcrWord[]>,
     };
     // Replace current tab if empty, otherwise open new tab
     if (state.pages.length === 0) {
@@ -296,6 +306,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       pages, currentPageId: pages[0]?.id ?? null,
       annotations: [], selectedIds: [], history: [[]] as Annotation[][], historyIndex: 0,
       isDirty: false, lastSavedHandle: null, formFieldValues: {} as Record<string, string | boolean>,
+      ocrResults: {} as Record<string, OcrWord[]>,
     };
     // Replace current tab if it has no document, otherwise open new tab
     if (state.pages.length === 0) {
@@ -350,6 +361,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setRightPanelOpen: (rightPanelOpen) => set({ rightPanelOpen }),
   setShowFindBar: (showFindBar) => set({ showFindBar }),
+  setShowOcr: (showOcr) => set({ showOcr }),
   setFindQuery: (findQuery) => set({ findQuery }),
   setCurrentPageId: (currentPageId) => set({ currentPageId }),
 
@@ -565,6 +577,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setFormFieldValue: (name, value) => set((s) => ({
     formFieldValues: { ...s.formFieldValues, [name]: value },
+    isDirty: true,
+  })),
+
+  setPageOcr: (pageId, words) => set((s) => ({
+    ocrResults: { ...s.ocrResults, [pageId]: words },
     isDirty: true,
   })),
 
