@@ -23,7 +23,7 @@ function isOwnerKey(key) {
 const PURCHASE_URL = 'https://shollyp007.gumroad.com/l/sholly-pdf'
 
 // Free trial length before activation is required.
-const TRIAL_DAYS = 7
+const TRIAL_DAYS = 3
 const DAY_MS = 24 * 60 * 60 * 1000
 
 // How many machines a single license key may be activated on.

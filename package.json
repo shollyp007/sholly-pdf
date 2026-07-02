@@ -1,7 +1,7 @@
 {
   "name": "sholly-pdf",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A fast, cross-platform PDF editor",
   "homepage": "https://github.com/shollyp007/sholly-pdf",
   "author": {
@@ -27,6 +27,7 @@
     "productName": "Sholly PDF",
     "copyright": "Copyright © 2025 Sholly PDF",
     "afterSign": "electron/notarize.cjs",
+    "afterAllArtifactBuild": "electron/sign-dmg.cjs",
     "asar": true,
     "asarUnpack": [
       "dist/tesseract/**"

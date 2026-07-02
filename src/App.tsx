@@ -493,7 +493,7 @@ function DocTabBar({ onOpen }: { onOpen: () => void }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   // ── License gate + free trial ────────────────────────────────────────────────
-  // Entitlement = paid license OR within the 7-day free trial. Browser builds skip
+  // Entitlement = paid license OR within the 3-day free trial. Browser builds skip
   // the gate entirely (no electron bridge). When the trial is active but unlicensed
   // we still run the app and show a countdown banner; once it expires we show the
   // activation wall (LicenseGate), which both links to purchase and accepts a key.
