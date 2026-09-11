@@ -145,7 +145,7 @@ function useMenuClose(
 }
 
 // ─── File menu ────────────────────────────────────────────────────────────────
-function FileDropdown({ onNew, onOpen, onSave, canSave }: { onNew: () => void; onOpen: () => void; onSave: () => void; canSave: boolean }) {
+function FileDropdown({ onNew, onOpen, onSave, onExportImages, canSave }: { onNew: () => void; onOpen: () => void; onSave: () => void; onExportImages: (format: 'png' | 'jpeg') => void; canSave: boolean }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -156,6 +156,10 @@ function FileDropdown({ onNew, onOpen, onSave, canSave }: { onNew: () => void; o
     { label: 'Open PDF…',     shortcut: '⌘O', fn: onOpen, icon: '⬆' },
     null,
     { label: 'Save…', shortcut: '⌘S', fn: onSave, icon: '📁', disabled: !canSave },
+    null,
+    { label: 'Export pages as PNG', fn: () => onExportImages('png'), icon: '🖼', disabled: !canSave },
+    { label: 'Export pages as JPEG', fn: () => onExportImages('jpeg'), icon: '🖼', disabled: !canSave },
+    null,
     { label: 'Print…', shortcut: '⌘P', fn: () => window.print(), icon: '⎙', disabled: !canSave },
   ];
 
@@ -564,6 +568,40 @@ export default function App() {
 
   const getCanvasInfos = () => viewerRef.current?.getCanvasInfos() ?? [];
 
+  async function exportImages(format: 'png' | 'jpeg') {
+    const infos = getCanvasInfos().filter((info) => info.dataUrl);
+    if (!infos.length) return;
+
+    const safeName = (docName || 'Sholly-PDF').replace(/[^a-z0-9-_]+/gi, '-');
+    const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+    const extension = format === 'png' ? 'png' : 'jpg';
+
+    for (const [index, info] of infos.entries()) {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('Unable to render page image'));
+        image.src = info.dataUrl!;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext('2d')?.drawImage(image, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, 0.92));
+      if (!blob) continue;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = safeName + '-page-' + (index + 1) + '.' + extension;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+  }
+
   // Keyboard shortcuts
   useEffect(() => {
     const TOOL_KEYS: Record<string, string> = {
@@ -711,7 +749,13 @@ export default function App() {
           <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
 
           {/* Menus */}
-          <FileDropdown onNew={() => setShowNewDoc(true)} onOpen={() => fileInputRef.current?.click()} onSave={() => setShowSave(true)} canSave={hasDoc} />
+          <FileDropdown
+            onNew={() => setShowNewDoc(true)}
+            onOpen={() => fileInputRef.current?.click()}
+            onSave={() => setShowSave(true)}
+            onExportImages={exportImages}
+            canSave={hasDoc}
+          />
           <EditDropdown canEdit={hasDoc} />
           <ViewDropdown canEdit={hasDoc} />
           <WindowDropdown />
