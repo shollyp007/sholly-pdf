@@ -104,6 +104,15 @@ jobs:
           path: release/*Portable*.exe
           if-no-files-found: warn
 
+
+      - name: Upload Windows Store AppX package
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sholly-PDF-win-store
+          path: release/*.appx
+          if-no-files-found: error
+
       - name: Upload Linux AppImage
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
@@ -160,6 +169,7 @@ jobs:
             | macOS (Intel) | `*.dmg` (non-arm64) | Drag to Applications |
             | Windows | `*Setup*.exe` | Standard installer |
             | Windows | `*Portable*.exe` | No install needed |
+            | Windows Store | `*.appx` | Submit to Microsoft Partner Center |
             | Linux | `*.AppImage` | `chmod +x` then run |
             | Linux | `*.deb` | `sudo dpkg -i` |
             | Linux | `*.rpm` | `sudo rpm -i` |
