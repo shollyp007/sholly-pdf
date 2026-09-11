@@ -115,6 +115,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "appx",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
@@ -168,6 +174,13 @@
       "owner": "shollyp007",
       "repo": "sholly-pdf",
       "releaseType": "release"
+    },
+    "appx": {
+      "applicationId": "ShollyPDF",
+      "identityName": "HorebDigitalNetworkInc.ShollyPDF",
+      "publisher": "CN=B6D45EA1-758D-4A6E-9C72-A237EA48A487",
+      "publisherDisplayName": "Horeb Digital Network Inc.",
+      "displayName": "Sholly PDF"
     }
   },
   "dependencies": {
