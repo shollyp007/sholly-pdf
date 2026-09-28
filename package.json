@@ -1,7 +1,7 @@
 {
   "name": "sholly-pdf",
   "private": true,
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "A fast, cross-platform PDF editor",
   "homepage": "https://github.com/shollyp007/sholly-pdf",
   "author": {
@@ -23,6 +23,7 @@
     "electron:build:linux": "node scripts/setup-tesseract.mjs && tsc -b && vite build && electron-builder --linux"
   },
   "build": {
+    "toolsets": { "winCodeSign": "1.1.0" },
     "appId": "com.sholly.pdf",
     "productName": "Sholly PDF",
     "copyright": "Copyright © 2025 Sholly PDF",
@@ -176,6 +177,7 @@
       "releaseType": "release"
     },
     "appx": {
+      "backgroundColor": "#090d38",
       "applicationId": "ShollyPDF",
       "identityName": "HorebDigitalNetworkInc.ShollyPDF",
       "publisher": "CN=B6D45EA1-758D-4A6E-9C72-A237EA48A487",

@@ -1,33 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e40af"/>
-      <stop offset="100%" style="stop-color:#7c3aed"/>
-    </linearGradient>
-    <linearGradient id="page" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#ffffff"/>
-      <stop offset="100%" style="stop-color:#e2e8f0"/>
-    </linearGradient>
-  </defs>
-  <!-- Background rounded rect -->
-  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
-  <!-- PDF page shadow -->
-  <rect x="128" y="92" width="240" height="300" rx="14" fill="rgba(0,0,0,0.25)"/>
-  <!-- PDF page -->
-  <rect x="120" y="84" width="240" height="300" rx="14" fill="url(#page)"/>
-  <!-- Dog-ear fold -->
-  <polygon points="304,84 360,84 360,140" fill="#c7d2fe" opacity="0.6"/>
-  <polygon points="304,84 360,140 304,140" fill="#a5b4fc" opacity="0.5"/>
-  <!-- Text lines on page -->
-  <rect x="152" y="156" width="140" height="8" rx="4" fill="#94a3b8"/>
-  <rect x="152" y="176" width="176" height="8" rx="4" fill="#94a3b8"/>
-  <rect x="152" y="196" width="156" height="8" rx="4" fill="#94a3b8"/>
-  <rect x="152" y="228" width="80" height="8" rx="4" fill="#94a3b8"/>
-  <rect x="152" y="248" width="176" height="8" rx="4" fill="#94a3b8"/>
-  <rect x="152" y="268" width="130" height="8" rx="4" fill="#94a3b8"/>
-  <!-- "S" letter overlay -->
-  <text x="256" y="460" font-family="Arial, sans-serif" font-size="68" font-weight="900"
-        text-anchor="middle" fill="white" opacity="0.95">S</text>
-  <!-- Bottom accent bar -->
-  <rect x="120" y="420" width="240" height="6" rx="3" fill="rgba(255,255,255,0.3)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="88" fill="#090d38"/>
+  <path d="M316 104H216C155 104 112 148 112 207V224C112 269 143 300 194 308V206C194 193 204 184 218 184H316Z" fill="#21e5dc"/>
+  <path d="M208 216H294C354 216 400 256 400 312C400 370 354 408 296 408H164V328H296C309 328 319 320 319 310C319 299 310 290 296 290H208Z" fill="#21e5dc"/>
+  <rect x="334" y="104" width="66" height="66" fill="#ffa86b"/>
 </svg>

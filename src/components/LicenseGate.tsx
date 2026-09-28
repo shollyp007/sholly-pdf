@@ -38,7 +38,7 @@ export default function LicenseGate({ onActivated }: Props) {
       }}>
         {/* Logo + title */}
         <div style={{ textAlign: 'center', marginBottom: 4 }}>
-          <div style={{ fontSize: 40, marginBottom: 10 }}>📄</div>
+          <img src="./favicon.svg" alt="" width={64} height={64} style={{ marginBottom: 10 }} />
           <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text, #f5f5f7)', letterSpacing: -0.3 }}>
             Sholly PDF
           </div>

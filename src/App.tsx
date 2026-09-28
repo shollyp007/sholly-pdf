@@ -19,14 +19,7 @@ import type { DocPage, AppTab } from './types';
 function Logo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', flexShrink: 0 }}>
-      <div style={{
-        width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'linear-gradient(145deg, #3b6fd4 0%, #7c3aed 100%)',
-        boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 3px 12px rgba(10,132,255,0.4)',
-        flexShrink: 0,
-      }}>
-        <span style={{ fontSize: 17, color: 'white', fontWeight: 900, letterSpacing: -0.5 }}>S</span>
-      </div>
+      <img src="./favicon.svg" alt="" width={34} height={34} style={{ flexShrink: 0 }} />
       <div style={{ lineHeight: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-bright)', letterSpacing: -0.4 }}>Sholly</div>
         <div style={{ fontSize: 8.5, background: 'linear-gradient(90deg,#4f7bff,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: 2.5, fontWeight: 700 }}>PDF</div>
@@ -979,14 +972,7 @@ function Landing({ onNew, onOpen, onDrop }: { onNew: () => void; onOpen: () => v
 
       {/* Hero */}
       <div style={{ textAlign: 'center', zIndex: 1 }}>
-        <div style={{
-          width: 72, height: 72, borderRadius: 20, margin: '0 auto 20px',
-          background: 'linear-gradient(145deg, #3b6fd4 0%, #7c3aed 100%)',
-          boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 8px 32px rgba(10,132,255,0.45)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ fontSize: 36, color: 'white', fontWeight: 900 }}>S</span>
-        </div>
+        <img src="./favicon.svg" alt="Sholly PDF" width={72} height={72} style={{ display: 'block', margin: '0 auto 20px' }} />
         <h1 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-bright)', margin: '0 0 10px', letterSpacing: -0.8, lineHeight: 1 }}>Sholly PDF</h1>
         <p style={{ color: 'var(--text-dim)', fontSize: 14.5, margin: 0, letterSpacing: 0.1 }}>Professional PDF creation and annotation</p>
       </div>
