@@ -4,8 +4,8 @@ const path = require('path')
 const https = require('https')
 const crypto = require('crypto')
 
-// Fill this in after creating your Gumroad product (Settings → Advanced → Product ID)
-const GUMROAD_PRODUCT_ID = 'YOUR_GUMROAD_PRODUCT_ID'
+// Gumroad product used to verify customer licenses.
+const GUMROAD_PRODUCT_ID = 'QoA3nYEgAb0tXVsNwu2qzw=='
 
 // Offline master keys that activate without contacting Gumroad — for your own copy and
 // to hand-issue licenses before the Gumroad product is live. Only SHA-256 *hashes* are
@@ -20,7 +20,7 @@ function isOwnerKey(key) {
 }
 
 // Where the "Purchase a license" button sends people. Update to your Gumroad product page.
-const PURCHASE_URL = 'https://shollyp007.gumroad.com/l/sholly-pdf'
+const PURCHASE_URL = 'https://adeaga2.gumroad.com/l/pefsolk'
 
 // Free trial length before activation is required.
 const TRIAL_DAYS = 3
@@ -163,7 +163,14 @@ function registerLicenseIpc() {
         return { success: false, error: `This key is already in use on ${SEAT_LIMIT} devices. Email support to free a slot.` }
       }
       // 3) Claim a seat (increments the count), then store the license locally.
-      await verifyWithGumroad(trimmed, true)
+      const claimed = await verifyWithGumroad(trimmed, true)
+      if (!claimed.success || !claimed.purchase || claimed.purchase.refunded ||
+          claimed.purchase.chargebacked || claimed.purchase.disputed) {
+        return { success: false, error: 'License activation was declined. Please contact support.' }
+      }
+      if (typeof claimed.uses !== 'number' || claimed.uses > SEAT_LIMIT) {
+        return { success: false, error: `This key is already in use on ${SEAT_LIMIT} devices. Email support to free a slot.` }
+      }
       const data = {
         key: trimmed,
         activatedAt: new Date().toISOString(),
